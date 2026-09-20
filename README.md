@@ -147,4 +147,4 @@ cd Android
 2. Jobba i `iOS/` eller `Android/` (håll plattformarna i synk vid gemensamma beteendeförändringar).
 3. Checka inte in hemligheter eller lokala SDK-sökvägar.
 
-Frågor kring Eneo-servern (appar, tokens, ACL) hör till backend/plattformen — den här repot innehåller bara klienterna.
+Frågor kring Eneo-servern (appar, tokens, ACL) hör till backend/plattformen — den här repot innehåller bara klienterna. Mer om Eneo finns på [eneo.ai](https://eneo.ai).
