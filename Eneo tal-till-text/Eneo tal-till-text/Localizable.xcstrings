@@ -1,0 +1,610 @@
+{
+  "sourceLanguage" : "sv",
+  "strings" : {
+    "·" : {
+
+    },
+    "%@ finns nu i listan och kan omvandlas till text." : {
+      "comment" : "Text när importen lyckades. Platshållaren är filens namn."
+    },
+    "%lld dagar" : {
+      "comment" : "Gallringsval i antal dagar. Platshållaren är antalet."
+    },
+    "%lld inspelningar gallras lokalt nästa gång appen öppnas. Material på er Eneo-server påverkas inte." : {
+
+    },
+    "1 dag" : {
+      "comment" : "Gallringsval: en dag"
+    },
+    "Adressen till din organisations Eneo. Byter du adress loggas du ut." : {
+
+    },
+    "Ändra" : {
+
+    },
+    "Ändra gallring?" : {
+
+    },
+    "Ändra serveradress" : {
+
+    },
+    "Ange adressen till din organisations Eneo-server." : {
+
+    },
+    "Ange en adress som börjar med https://" : {
+
+    },
+    "Anslut till Eneo" : {
+
+    },
+    "Appen är gratis och fortsätter vara det." : {
+
+    },
+    "Appen behöver åtkomst till mikrofonen för att spela in ljud. Aktivera mikrofonåtkomst i Inställningar." : {
+
+    },
+    "Appen fick inte tillgång till filen. Försök dela den på nytt." : {
+      "comment" : "Åtgärd när importerad fil nekas"
+    },
+    "Appen kunde inte starta." : {
+      "comment" : "Allmänt startfel"
+    },
+    "Appen tillhandahålls ”i befintligt skick” och ”som tillgänglig” utan garantier av något slag. Christian Alfredsson tar inget ansvar för transkriberingens riktighet, förlust av data, Eneo-serverns tillgänglighet eller skador som uppstår genom din användning av appen. Du använder appen helt på egen risk." : {
+
+    },
+    "Appens lokala databas kunde inte öppnas." : {
+      "comment" : "Startfel utan reservlagring"
+    },
+    "Appens lokala databas kunde inte öppnas. Tillfällig lagring används tills appen startas om." : {
+      "comment" : "Startfel med reservlagring"
+    },
+    "Arbetar..." : {
+      "comment" : "Reservstatus under uppladdning\nStatus för okänt läge i Eneo-körningen"
+    },
+    "Återställd %@" : {
+      "comment" : "Titel på inspelning som återfunnits vid start. Platshållaren är datum och tid."
+    },
+    "Återuppta inspelning" : {
+
+    },
+    "Automatisk gallring" : {
+
+    },
+    "Avbruten" : {
+      "comment" : "Rubrik när användaren avbröt"
+    },
+    "Avbryt" : {
+
+    },
+    "christian@iteca.se" : {
+
+    },
+    "Datum" : {
+
+    },
+    "Dela resultat" : {
+
+    },
+    "Delade appar" : {
+
+    },
+    "Den förvalda appen används för nya omvandlingar. Du kan välja en annan app på en enskild inspelning." : {
+
+    },
+    "Din inloggning gäller inte längre" : {
+      "comment" : "Rubrik när token saknas eller nekas"
+    },
+    "Dina inspelningar ligger kvar på telefonen." : {
+
+    },
+    "Du är inloggad" : {
+
+    },
+    "Du är inte inloggad" : {
+      "comment" : "Rubrik när token saknas"
+    },
+    "Du kan importera ljudfiler av typen m4a, wav, mp3, caf, aac och flac." : {
+      "comment" : "Lista över filformat som stöds"
+    },
+    "Du kan nu välja vilken Eneo-app som ska användas för transkriberingar." : {
+
+    },
+    "Du kan spela in och hantera inspelningar utan nät. Inloggning sker när du omvandlar till text — då behöver du nå Eneo-servern." : {
+
+    },
+    "En inspelning är omvandlad till text och finns i appen." : {
+      "comment" : "Notistext utan titel, så inget känsligt syns på låsskärmen"
+    },
+    "En omvandling kunde inte slutföras. Öppna appen för att se varför." : {
+      "comment" : "Notistext utan titel eller feldetaljer"
+    },
+    "Eneo" : {
+
+    },
+    "Eneo angav ingen orsak. Försök igen." : {
+      "comment" : "Åtgärd när körningen misslyckades utan orsak"
+    },
+    "Eneo kunde inte logga in dig" : {
+      "comment" : "Rubrik vid serverfel under inloggning"
+    },
+    "Eneo kunde inte utföra begäran" : {
+      "comment" : "Rubrik vid serverfel"
+    },
+    "Eneo skickade tillbaka ett tomt resultat." : {
+      "comment" : "Fel när körningen är klar utan text"
+    },
+    "Eneo tal-till-text" : {
+
+    },
+    "Eneo-konto" : {
+
+    },
+    "Exempel: https://eneo.dinorganisation.se" : {
+
+    },
+    "Felsökning" : {
+
+    },
+    "Fil" : {
+
+    },
+    "Filen kan ha raderats utanför appen. Du kan inte spela upp eller omvandla den här inspelningen." : {
+      "comment" : "Förklaring när ljudfilen saknas"
+    },
+    "Filen kan ha raderats utanför appen. Spela in på nytt." : {
+      "comment" : "Åtgärd när ljudfilen saknas"
+    },
+    "Filen kunde inte importeras" : {
+      "comment" : "Rubrik när importen misslyckades"
+    },
+    "Filen kunde inte öppnas" : {
+      "comment" : "Rubrik när importerad fil nekas"
+    },
+    "Filen ser inte ut att vara ett stött ljudformat. Du kan importera m4a, wav, mp3, caf, aac och flac." : {
+      "comment" : "Magic-byte-validering misslyckades"
+    },
+    "Filformatet stöds inte" : {
+      "comment" : "Rubrik vid okänt filformat"
+    },
+    "Försök igen om en stund." : {
+      "comment" : "Åtgärd vid serverfel utan meddelande"
+    },
+    "Försök igen. Kvarstår felet behöver din organisation kontrollera Eneo." : {
+      "comment" : "Åtgärd vid ofullständigt svar"
+    },
+    "Försök igen. Kvarstår felet kan du kontrollera serveradressen under Inställningar." : {
+      "comment" : "Åtgärd när inloggningsadressen inte är https"
+    },
+    "Försök igen. Kvarstår felet kan servern vara nere." : {
+      "comment" : "Åtgärd vid ogiltigt svar"
+    },
+    "Försök logga in igen." : {
+      "comment" : "Åtgärd vid trasig inloggning"
+    },
+    "Fortsätt spela in" : {
+
+    },
+    "Förvald app" : {
+      "comment" : "Visas tills namnet på förvald Eneo-app har hämtats"
+    },
+    "Gallring" : {
+
+    },
+    "Hämtar appar..." : {
+
+    },
+    "Hämtar resultat..." : {
+      "comment" : "Status medan resultatet hämtas hem"
+    },
+    "https://eneo.dinorganisation.se" : {
+
+    },
+    "Importerad" : {
+      "comment" : "VoiceOver när inspelningen är importerad"
+    },
+    "Information" : {
+
+    },
+    "Inga appar hittades" : {
+      "comment" : "Rubrik när kontot saknar appar"
+    },
+    "Inga appar hittades. Kontrollera att ditt konto har tillgång till minst en app för tal till text." : {
+
+    },
+    "Inga appar matchar sökningen." : {
+
+    },
+    "Inga inspelningar" : {
+
+    },
+    "Inga spaces hittades" : {
+      "comment" : "Rubrik när kontot saknar spaces"
+    },
+    "Ingen Eneo-app är vald" : {
+      "comment" : "Rubrik när app-ID saknas"
+    },
+    "Ingen internetanslutning" : {
+      "comment" : "Rubrik när enheten saknar nätverk"
+    },
+    "Inloggad" : {
+
+    },
+    "Inloggning pågår redan" : {
+      "comment" : "Rubrik när inloggning redan är igång"
+    },
+    "Inloggningen kunde inte bekräftas" : {
+      "comment" : "Rubrik när sessionen inte kunde verifieras"
+    },
+    "Inloggningen kunde inte slutföras" : {
+      "comment" : "Rubrik när callbacken saknar kod"
+    },
+    "Inloggningen kunde inte startas" : {
+      "comment" : "Rubrik när inloggningsadressen saknar https"
+    },
+    "Inloggningen kunde inte verifieras" : {
+      "comment" : "Rubrik vid state mismatch"
+    },
+    "Inloggningen öppnas säkert via organisationens inloggningstjänst." : {
+
+    },
+    "Inspelad tid" : {
+
+    },
+    "Inspelning %@" : {
+      "comment" : "Förvald titel på en ny inspelning. Platshållaren är datum och tid."
+    },
+    "Inspelningar sparas lokalt på din enhet." : {
+
+    },
+    "Inspelningen kunde inte sparas i listan" : {
+      "comment" : "Rubrik när metadata saknas"
+    },
+    "Inspelningen och ljudfilen raderas permanent." : {
+
+    },
+    "Inspelningen stoppades automatiskt efter 2 timmar. Ljudfilen är sparad." : {
+
+    },
+    "Inställningar" : {
+
+    },
+    "iteca.se/eneotaltilltext" : {
+
+    },
+    "Källa" : {
+
+    },
+    "Kasta inspelningen" : {
+
+    },
+    "Kasta inspelningen?" : {
+
+    },
+    "Klar" : {
+
+    },
+    "Kommunikation OK" : {
+      "comment" : "Rubrik när alla kommunikationstester lyckas\nRubrik när servertest lyckas"
+    },
+    "Kontakt" : {
+
+    },
+    "Kontrollera att det finns ledigt utrymme på telefonen och försök igen." : {
+      "comment" : "Åtgärd när importen misslyckades"
+    },
+    "Kontrollera att du är på ett nätverk som når Eneo-servern. Se också att serveradressen i Inställningar stämmer." : {
+      "comment" : "Åtgärd när servern inte går att nå"
+    },
+    "Kontrollera att ingen annan app använder mikrofonen och försök igen." : {
+      "comment" : "Åtgärd när inspelningen inte kan starta\nÅtgärd när inspelningen inte startar"
+    },
+    "Kontrollera med din organisation att ditt konto har tillgång till en app för tal till text." : {
+      "comment" : "Åtgärd när appar saknas"
+    },
+    "Kontrollera med din organisation att ditt konto har tillgång till Eneo." : {
+      "comment" : "Åtgärd när verifieringen nekas"
+    },
+    "Kontrollera med din organisation att ditt konto har tillgång till minst ett space." : {
+      "comment" : "Åtgärd när spaces saknas"
+    },
+    "Kontrollera nätverksanslutningen och försök igen." : {
+      "comment" : "Åtgärd vid saknat nätverk"
+    },
+    "Kontrollera serveradressen under Inställningar." : {
+      "comment" : "Åtgärd vid ogiltig adress"
+    },
+    "Kontrollerar anslutning" : {
+
+    },
+    "Kontrollerar anslutning till servern" : {
+
+    },
+    "Kontrollerar servern" : {
+
+    },
+    "Kontrollerar servern…" : {
+
+    },
+    "Kopiera resultat" : {
+
+    },
+    "Kunde inte ansluta till Eneo" : {
+
+    },
+    "Kunde inte nå Eneo-servern" : {
+      "comment" : "Rubrik när servern inte svarar"
+    },
+    "Kunde inte spela upp" : {
+      "comment" : "Rubrik när uppspelning misslyckas"
+    },
+    "Kunde inte starta" : {
+
+    },
+    "Kunde inte starta inspelningen" : {
+      "comment" : "Rubrik när inspelningen inte kan starta\nRubrik när mikrofoninspelning inte startar"
+    },
+    "Laddar upp ljud..." : {
+      "comment" : "Status medan ljudfilen skickas"
+    },
+    "Längd" : {
+
+    },
+    "Läs viktig %@ innan du spelar in." : {
+
+    },
+    "Låt appen vara öppen medan du spelar in. Gör du något annat på telefonen kan inspelningen stoppas." : {
+
+    },
+    "Ljudet du har spelat in raderas och går inte att få tillbaka." : {
+
+    },
+    "Ljudfilen är importerad" : {
+      "comment" : "Rubrik när importen lyckades"
+    },
+    "Ljudfilen finns kvar på telefonen och dyker upp i listan nästa gång du startar appen." : {
+      "comment" : "Förklaring när metadata saknas"
+    },
+    "Ljudfilen går inte att öppna. Den kan vara skadad." : {
+      "comment" : "Förklaring när uppspelning misslyckas"
+    },
+    "Ljudfilen kan vara för lång. Försök igen eller dela upp inspelningen." : {
+      "comment" : "Åtgärd vid timeout"
+    },
+    "Ljudfilen saknas" : {
+      "comment" : "Rubrik när ljudfilen inte finns kvar på enheten\nRubrik när ljudfilen inte finns på enheten"
+    },
+    "Logga in" : {
+
+    },
+    "Logga in i Eneo" : {
+
+    },
+    "Logga in i Eneo för att skicka inspelningen." : {
+      "comment" : "Åtgärd när token saknas"
+    },
+    "Logga in i Eneo igen för att skicka inspelningen." : {
+      "comment" : "Åtgärd vid utgången inloggning"
+    },
+    "Logga in med det konto du använder hos din organisation." : {
+
+    },
+    "Logga ut" : {
+
+    },
+    "Logga ut från Eneo?" : {
+
+    },
+    "Maximal inspelningstid (2 timmar) närmar sig" : {
+
+    },
+    "Maximal längd nådd" : {
+
+    },
+    "Mikrofonåtkomst krävs" : {
+
+    },
+    "Mina appar" : {
+
+    },
+    "Något gick fel" : {
+      "comment" : "Rubrik för fel utan känd orsak"
+    },
+    "Når ej server" : {
+
+    },
+    "Ofullständigt svar från Eneo" : {
+      "comment" : "Rubrik när ett fält saknas i svaret"
+    },
+    "OK" : {
+
+    },
+    "Omvandla igen" : {
+
+    },
+    "Omvandla till text" : {
+
+    },
+    "Omvandling misslyckades" : {
+      "comment" : "VoiceOver när textomvandling misslyckades"
+    },
+    "Omvandling pågår" : {
+      "comment" : "VoiceOver när textomvandling pågår"
+    },
+    "Omvandlingen misslyckades" : {
+      "comment" : "Notisrubrik när omvandlingen misslyckades\nRubrik när Eneo-körningen misslyckades"
+    },
+    "Omvandlingen tog för lång tid" : {
+      "comment" : "Rubrik när körningen inte blev klar i tid"
+    },
+    "Öppna Inställningar" : {
+
+    },
+    "Öppnar Eneo-inloggning..." : {
+      "comment" : "Status medan inloggningssidan hämtas"
+    },
+    "Öppnar inloggning..." : {
+      "comment" : "Status medan inloggningssidan hämtas"
+    },
+    "Öppnar inspelningen" : {
+
+    },
+    "Öppnar viktig information om inspelning" : {
+
+    },
+    "Oväntat svar från Eneo" : {
+      "comment" : "Rubrik när inloggningssvaret inte är giltig HTTP\nRubrik när svaret inte är giltig HTTP"
+    },
+    "Pausa inspelning" : {
+
+    },
+    "Radera" : {
+
+    },
+    "Radera inspelning?" : {
+
+    },
+    "Raderar automatiskt ljud och text i appen efter valt antal dagar (högst 30). Material på er Eneo-server påverkas inte." : {
+
+    },
+    "Resultat" : {
+
+    },
+    "Sammanfattar med AI..." : {
+      "comment" : "Status medan Eneo sammanfattar texten"
+    },
+    "Server" : {
+      "comment" : "Kommunikationscheck: server"
+    },
+    "Server, inloggning och appar fungerar. %lld appar kan hämtas." : {
+      "comment" : "Sammanfattning av lyckat kommunikationstest"
+    },
+    "Serveradress" : {
+
+    },
+    "Serveradressen är ogiltig" : {
+      "comment" : "Rubrik när Eneo-adressen inte går att tolka"
+    },
+    "Servern är verifierad" : {
+
+    },
+    "Servern svarade inte i tid. Kontrollera att du är på ett nätverk som når Eneo-servern och försök igen." : {
+      "comment" : "Åtgärd vid timeout med nätverksråd"
+    },
+    "Servern svarar." : {
+      "comment" : "Servertest utan inloggning"
+    },
+    "Slutför inloggning..." : {
+      "comment" : "Status medan koden växlas mot token"
+    },
+    "Sök" : {
+
+    },
+    "Spela in" : {
+
+    },
+    "Spela in ljud för att komma igång." : {
+
+    },
+    "Spela in samtal och omvandla ljud till text med din organisations Eneo." : {
+
+    },
+    "Spela upp" : {
+
+    },
+    "Stäng" : {
+
+    },
+    "Starta inspelning" : {
+
+    },
+    "Starta om appen. Om felet kvarstår kan appens lokala data behöva rensas." : {
+
+    },
+    "Status" : {
+
+    },
+    "Steg %lld av %lld" : {
+      "localizations" : {
+        "sv" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Steg %1$lld av %2$lld"
+          }
+        }
+      }
+    },
+    "Stoppa" : {
+
+    },
+    "Stoppa och spara inspelning" : {
+
+    },
+    "Testa kommunikation till Eneo" : {
+
+    },
+    "Testar först att servern går att nå, sedan inloggning och appar om du är inloggad. Filuppladdning testas när du omvandlar en inspelning." : {
+
+    },
+    "Testar kommunikation..." : {
+
+    },
+    "Text klar" : {
+      "comment" : "VoiceOver när transkriptionen är klar"
+    },
+    "Texten är klar" : {
+      "comment" : "Notisrubrik när omvandlingen lyckades"
+    },
+    "Tiden gick ut" : {
+      "comment" : "Rubrik vid timeout"
+    },
+    "Tillbaka" : {
+
+    },
+    "Titel" : {
+
+    },
+    "Transkriberar..." : {
+      "comment" : "Status medan Eneo omvandlar tal till text"
+    },
+    "Uppladdad" : {
+
+    },
+    "Uppspelning" : {
+
+    },
+    "Utloggad" : {
+
+    },
+    "Utvecklingen sker på fritiden, vid sidan av ordinarie arbete. Vill din verksamhet säkra fortsatt drift och vidareutveckling finns supportavtal — mejla christian@iteca.se så återkommer jag med upplägg." : {
+
+    },
+    "Välj Eneo-app. Kräver nätverk och inloggning." : {
+
+    },
+    "Välj förvald Eneo-app. Kräver nätverk." : {
+
+    },
+    "Välj transkriberingsapp" : {
+
+    },
+    "Välj vilken Eneo-app som normalt ska användas för nya transkriberingar. Du kan byta app för en enskild inspelning senare." : {
+
+    },
+    "Välj vilken Eneo-app som ska användas under Inställningar." : {
+      "comment" : "Åtgärd när app saknas"
+    },
+    "Välkommen" : {
+
+    },
+    "Vänta tills den pågående inloggningen är klar." : {
+      "comment" : "Åtgärd när inloggning redan pågår"
+    },
+    "Väntar på inloggning..." : {
+      "comment" : "Status medan användaren loggar in"
+    },
+    "Verifierar inloggning..." : {
+      "comment" : "Status medan sessionen verifieras"
+    }
+  },
+  "version" : "1.0"
+}

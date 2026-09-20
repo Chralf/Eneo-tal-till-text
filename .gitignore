@@ -1,0 +1,47 @@
+# OS / IDE
+.DS_Store
+.cursor/
+*.iml
+.idea/
+
+# Non-app workspace content
+eneo-develop/
+AndroidKeystore/
+AUDIT.md
+TODO-BACKEND.md
+IMG_*.PNG
+IMG_*.jpg
+IMG_*.jpeg
+icon.jpg
+**/Apple Human Interface Guideline/
+
+# Secrets & local config
+**/*.jks
+**/*.keystore
+**/keystore.properties
+**/local.properties
+.env
+.env.*
+*.p12
+*.mobileprovision
+google-services.json
+GoogleService-Info.plist
+
+# Android build
+**/.gradle/
+**/.kotlin/
+**/build/
+**/app/release/
+*.apk
+*.ap_
+*.aab
+*.dex
+*.class
+
+# Xcode / iOS local
+**/xcuserdata/
+*.xcuserstate
+*.xccheckout
+*.xcscmblueprint
+DerivedData/
+**/build.nosync/
