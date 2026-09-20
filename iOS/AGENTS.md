@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-This repository contains an iOS SwiftUI app in `Eneo tal-till-text/`. App entry points are `EneoTalTillTextApp.swift` and `ContentView.swift`. Domain data lives in `Models/`, service logic in `Services/`, and SwiftUI screens/components in `Views/`. App icons, colors, and bundled resources live in `Assets.xcassets`.
+This repository contains an iOS SwiftUI app in `iOS/Eneo tal-till-text/`. App entry points are `EneoTalTillTextApp.swift` and `ContentView.swift`. Domain data lives in `Models/`, service logic in `Services/`, and SwiftUI screens/components in `Views/`. App icons, colors, and bundled resources live in `Assets.xcassets`.
 
 The checkout also includes package dependency sources such as `argmax-oss-swift/` and `swift-argument-parser/`. Treat these as external dependencies unless a task explicitly targets them.
 

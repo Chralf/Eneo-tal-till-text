@@ -2,10 +2,12 @@
 
 Mobilklienter för Eneo tal-till-text:
 
-- **iOS** — `Eneo tal-till-text/`
+- **iOS** — `iOS/`
 - **Android** — `Android/`
 
 Apparna spelar in ljud, sparar lokalt och skickar till Eneo för omvandling till text.
+
+Öppna iOS-projektet via `iOS/Eneo tal-till-text.xcodeproj`.
 
 ## Lokal signering (Android)
 
