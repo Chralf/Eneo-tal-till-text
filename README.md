@@ -1,14 +1,150 @@
 # Eneo tal-till-text
 
-Mobilklienter för Eneo tal-till-text:
+Mobilappar för att spela in tal, spara det lokalt och skicka till **Eneo** för omvandling till text (transkribering/sammanfattning via vald Eneo-app).
 
-- **iOS** — `iOS/`
-- **Android** — `Android/`
+Båda plattformarna delar samma arbetsflöde och ungefär samma funktioner, men är byggda med respektive plattforms egna verktyg.
 
-Apparna spelar in ljud, sparar lokalt och skickar till Eneo för omvandling till text.
+| | iOS | Android |
+|---|---|---|
+| Mapp | [`iOS/`](iOS/) | [`Android/`](Android/) |
+| Teknik | SwiftUI, SwiftData | Kotlin, Jetpack Compose, Room |
+| Bundle / package | `se.iteca.ciklid.Eneo-tal-till-text` | `se.iteca.eneotaltilltext` |
+| Min OS | iOS 26.4 | API 33 (Android 13) |
 
-Öppna iOS-projektet via `iOS/Eneo tal-till-text.xcodeproj`.
+---
 
-## Lokal signering (Android)
+## Vad apparna gör
 
-Release-signering använder en lokal keystore som **inte** ingår i repot. Lägg `keystore.properties` i `Android/` (se `Android/keystore.properties.example`).
+1. **Spela in** ljud med mikrofon (paus/återuppta, vågform, max ca 2 timmar).
+2. **Spara lokalt** — inspelningar lagras på enheten och syns i en lista.
+3. **Logga in mot Eneo** och välja vilken Eneo-app som ska omvandla ljudet.
+4. **Ladda upp** inspelningen och hämta tillbaka resultatet som markdown-text.
+5. **Läsa, kopiera och dela** resultatet (formaterad text vid kopiering, inte rå markdown).
+
+Övrigt som ingår på båda sidor:
+
+- Importera befintliga ljudfiler
+- Gallring efter valfritt antal dagar (retention)
+- Återställning av inspelningar som avbrutits (segmentfiler sätts ihop vid start)
+- Onboarding för serveradress och inloggning
+
+---
+
+## Repostruktur
+
+```
+.
+├── Android/          # Android-app (Gradle)
+├── iOS/              # iOS-app (Xcode)
+│   ├── Eneo tal-till-text.xcodeproj
+│   ├── Eneo tal-till-text/          # källkod
+│   └── Eneo tal-till-textTests/     # unit tests
+└── README.md
+```
+
+Hemligheter (keystore, `local.properties`, `.env` m.m.) ingår **inte** i repot — se `.gitignore`.
+
+---
+
+## iOS
+
+### Öppna projektet
+
+```bash
+open "iOS/Eneo tal-till-text.xcodeproj"
+```
+
+Välj schemat **Eneo tal-till-text** och kör på simulator eller enhet.
+
+### Krav
+
+- Xcode med iOS 26.4 SDK (eller senare som projektet anger)
+- Apple Developer-konto för enhets-/App Store-byggen
+
+### Tester
+
+Unit tests ligger i `iOS/Eneo tal-till-textTests/` (t.ex. filnamn, retention, bas-URL). Kör via Product → Test i Xcode, eller:
+
+```bash
+cd iOS
+xcodebuild test -scheme "Eneo tal-till-text" -destination 'platform=iOS Simulator,name=iPhone 17'
+```
+
+### Viktiga mappar i källan
+
+| Mapp | Innehåll |
+|------|----------|
+| `Models/` | `Recording` m.m. |
+| `Services/` | Inspelning, uppladdning, auth, persistence |
+| `Views/` | SwiftUI-skärmar och komponenter |
+| `Utilities/` | t.ex. markdown-export till urklipp |
+
+---
+
+## Android
+
+### Öppna / bygga
+
+Öppna mappen `Android/` i Android Studio, eller bygg från terminal:
+
+```bash
+cd Android
+./gradlew :app:assembleDebug
+```
+
+Release-AAB till Play Store:
+
+```bash
+cd Android
+./gradlew :app:bundleRelease
+```
+
+AAB hamnar under build-output (projektet speglar build-katalogen till en cache under `~/Library/Caches/...`).
+
+### Krav
+
+- JDK 17
+- Android SDK (API 33–37 enligt `app/build.gradle.kts`)
+
+### Signering (release)
+
+1. Skapa eller använd en lokal `.jks` (ligger t.ex. utanför repot under `AndroidKeystore/`).
+2. Kopiera `Android/keystore.properties.example` → `Android/keystore.properties`.
+3. Fyll i `storeFile`, `storePassword`, `keyAlias`, `keyPassword`.
+
+`keystore.properties` och `*.jks` är gitignorade och ska aldrig checkas in.
+
+### Tester
+
+```bash
+cd Android
+./gradlew :app:testDebugUnitTest
+```
+
+### Viktiga paket i källan
+
+| Paket | Innehåll |
+|-------|----------|
+| `audio/` | Inspelning, segment, foreground service |
+| `data/` | Room, filer, retention |
+| `network/` | Eneo API, auth, uppladdning |
+| `ui/` | Compose-skärmar |
+| `markdown/` | Visning + HTML/plain-export |
+
+---
+
+## Gemensamt beteende att känna till
+
+- **Segmentinspelning** — ljud skrivs i korta delar och slås ihop vid stopp eller vid appstart om processen dog.
+- **Bakgrund** — Android har en inspelningsnotis; att svepa bort appen från senaste appar stoppar och sparar inspelningen. iOS har motsvarande livscykelhantering.
+- **Resultat** — visas formaterat i appen; **Kopiera** lägger HTML + läsbar text i urklipp så att t.ex. Mail behåller rubriker och listor bättre än rå markdown.
+
+---
+
+## Bidra / utveckla
+
+1. Klona repot.
+2. Jobba i `iOS/` eller `Android/` (håll plattformarna i synk vid gemensamma beteendeförändringar).
+3. Checka inte in hemligheter eller lokala SDK-sökvägar.
+
+Frågor kring Eneo-servern (appar, tokens, ACL) hör till backend/plattformen — den här repot innehåller bara klienterna.
