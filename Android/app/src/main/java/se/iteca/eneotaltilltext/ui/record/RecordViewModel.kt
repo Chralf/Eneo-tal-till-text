@@ -32,12 +32,14 @@ class RecordViewModel(
 
     private var activeRecording: RecordingEntity? = null
     private val dbLock = Mutex()
+    private var finalizeStarted = false
 
     fun clearError() {
         _errorMessage.value = null
     }
 
     fun startRecording() {
+        if (recorder.isFinalizing.value) return
         try {
             val file = repository.createRecordingFile()
             recorder.onSegmentFinalized = { duration ->
@@ -87,23 +89,32 @@ class RecordViewModel(
         }
     }
 
-    fun finalizeRecording(fromMaxDuration: Boolean): RecordingEntity? {
-        val duration = if (fromMaxDuration && recorder.state.value == RecordingState.Idle) {
-            recorder.lastCompletedDuration.takeIf { it > 0 }
-                ?: RecordingEntity.MAX_RECORDING_DURATION_SECONDS
-        } else if (recorder.state.value != RecordingState.Idle) {
-            recorder.stop()
-        } else {
-            activeRecording?.duration ?: 0.0
+    fun finalizeRecording(fromMaxDuration: Boolean, onSaved: (RecordingEntity?) -> Unit) {
+        // A second tap on stop while the merge is running must not finalize twice.
+        if (finalizeStarted || (!fromMaxDuration && recorder.isFinalizing.value)) return
+        finalizeStarted = true
+        viewModelScope.launch {
+            val duration = if (fromMaxDuration && recorder.state.value == RecordingState.Idle) {
+                recorder.lastCompletedDuration.takeIf { it > 0 }
+                    ?: RecordingEntity.MAX_RECORDING_DURATION_SECONDS
+            } else if (recorder.state.value != RecordingState.Idle || recorder.isFinalizing.value) {
+                recorder.stop()
+            } else {
+                activeRecording?.duration ?: 0.0
+            }
+            recorder.onSegmentFinalized = null
+            RecordingForegroundService.stop(getApplication())
+            val recording = activeRecording
+            if (recording == null) {
+                onSaved(null)
+                return@launch
+            }
+            val updated = recording.copy(duration = duration)
+            activeRecording = null
+            repository.setActiveRecordingId(null)
+            dbLock.withLock { repository.insert(updated) }
+            onSaved(updated)
         }
-        recorder.onSegmentFinalized = null
-        RecordingForegroundService.stop(getApplication())
-        val recording = activeRecording ?: return null
-        val updated = recording.copy(duration = duration)
-        activeRecording = null
-        repository.setActiveRecordingId(null)
-        viewModelScope.launch { dbLock.withLock { repository.insert(updated) } }
-        return updated
     }
 
     private fun persistDuration(duration: Double = recorder.recordingTime.value) {

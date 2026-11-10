@@ -46,8 +46,10 @@
     <string name="record_content_desc_pause">Pausa</string>
     <string name="record_content_desc_stop">Stoppa</string>
     <string name="record_content_desc_resume">Fortsätt</string>
+    <string name="record_saving">Sparar inspelningen…</string>
+    <string name="detail_technical_info">Teknisk information</string>
 
-    <string name="detail_action_stop">Stoppa</string>
+    <string name="detail_action_pause">Pausa</string>
     <string name="detail_action_play">Spela upp</string>
     <string name="detail_title_label">Titel</string>
     <string name="detail_section_info">Information</string>
@@ -62,12 +64,16 @@
     <string name="detail_error_missing">Inspelning saknas</string>
     <string name="detail_audio_missing_title">Ljudfilen saknas</string>
     <string name="detail_audio_missing_message">Filen kan ha raderats utanför appen. Du kan inte spela upp eller omvandla den här inspelningen.</string>
+    <string name="detail_audio_recovering">Återställer ljudfilen…</string>
+    <string name="detail_audio_parts_message">Ljudet finns sparat i delar på telefonen men kunde inte slås ihop. Håll appen öppen och försök igen.</string>
     <string name="detail_playback_error_title">Kunde inte spela upp</string>
     <string name="detail_playback_error_message">Ljudfilen går inte att öppna. Den kan vara skadad.</string>
     <string name="detail_convert">Omvandla till text</string>
     <string name="detail_convert_again">Omvandla igen</string>
     <string name="detail_working">Arbetar…</string>
     <string name="detail_default_app">Förvald app</string>
+    <string name="detail_select_app">Välj Eneo-app</string>
+    <string name="detail_select_app_footer">Välj vilken Eneo-app som ska omvandla inspelningen. Du kan också välja en förvald app under Inställningar.</string>
     <string name="detail_apps_loading">Hämtar appar</string>
     <string name="detail_app_search">Sök</string>
     <string name="detail_app_picker_title">Eneo</string>
@@ -125,6 +131,7 @@
     <string name="settings_account_footer">Du kan spela in och hantera inspelningar utan nät. Inloggning sker när du omvandlar till text — då behöver du nå Eneo-servern.</string>
     <string name="settings_section_convert">Omvandla till text</string>
     <string name="settings_default_app">Förvald app</string>
+    <string name="settings_select_app">Välj app</string>
     <string name="settings_convert_footer">Den förvalda appen används för nya omvandlingar. Du kan välja en annan app på en enskild inspelning.</string>
     <string name="settings_section_diagnostics">Felsökning</string>
     <string name="settings_section_retention">Gallring</string>
@@ -191,6 +198,8 @@
     <string name="settings_diagnostics_footer">Testar först att servern går att nå, sedan inloggning och appar om du är inloggad. Filuppladdning testas när du omvandlar en inspelning.</string>
     <string name="error_cancelled_title">Avbruten</string>
     <string name="error_api_url_invalid">Serveradressen är ogiltig.</string>
+    <string name="error_missing_server_url_title">Ingen serveradress är angiven</string>
+    <string name="error_missing_server_url_message">Ange adressen till din organisations Eneo under Inställningar.</string>
     <string name="error_missing_app_id">Ingen Eneo-app är vald</string>
     <string name="error_missing_app_id_message">Välj vilken Eneo-app som ska användas under Inställningar.</string>
     <string name="error_missing_token">Logga in i Eneo för att skicka inspelningen.</string>

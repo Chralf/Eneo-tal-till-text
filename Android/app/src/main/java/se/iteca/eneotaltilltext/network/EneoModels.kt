@@ -6,6 +6,13 @@ import se.iteca.eneotaltilltext.data.ErrorPresentation
 import se.iteca.eneotaltilltext.data.PresentableException
 
 object RecordingUploadErrors {
+    fun missingServerUrl(context: Context) = PresentableException(
+        ErrorPresentation(
+            title = context.getString(R.string.error_missing_server_url_title),
+            message = context.getString(R.string.error_missing_server_url_message),
+        ),
+    )
+
     fun missingApiSettings(context: Context) = PresentableException(
         ErrorPresentation(
             title = context.getString(R.string.auth_invalid_url_title),

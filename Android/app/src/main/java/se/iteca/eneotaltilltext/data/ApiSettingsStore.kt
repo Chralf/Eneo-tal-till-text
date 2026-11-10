@@ -23,8 +23,7 @@ class ApiSettingsStore(context: Context) {
     var baseUrl: String
         get() {
             val stored = prefs.getString(KEY_BASE_URL, null)?.trim().orEmpty()
-            val raw = stored.ifEmpty { DEFAULT_BASE_URL }
-            return normalizedBaseUrl(raw).ifEmpty { DEFAULT_BASE_URL }
+            return normalizedBaseUrl(stored)
         }
         set(value) {
             val normalized = normalizedBaseUrl(value)
@@ -33,14 +32,21 @@ class ApiSettingsStore(context: Context) {
             }
         }
 
+    /**
+     * The chosen default app, or empty when the user has not picked one yet.
+     * Every Eneo installation has its own app IDs, so there is no built-in default.
+     */
     var appId: String
-        get() {
-            val stored = prefs.getString(KEY_APP_ID, null)?.trim().orEmpty()
-            return stored.ifEmpty { DEFAULT_APP_ID }
-        }
+        get() = prefs.getString(KEY_APP_ID, null)?.trim().orEmpty()
         set(value) {
-            prefs.edit().putString(KEY_APP_ID, value.trim().ifEmpty { DEFAULT_APP_ID }).apply()
+            val trimmed = value.trim()
+            prefs.edit().apply {
+                if (trimmed.isEmpty()) remove(KEY_APP_ID) else putString(KEY_APP_ID, trimmed)
+            }.apply()
         }
+
+    val hasDefaultApp: Boolean
+        get() = appId.isNotEmpty()
 
     var defaultAppName: String
         get() = prefs.getString(KEY_APP_NAME, "") ?: ""
@@ -100,9 +106,17 @@ class ApiSettingsStore(context: Context) {
             return stored.isNotEmpty()
         }
 
-    fun shouldShowOnboarding(): Boolean = !onboardingCompleted && !hasExplicitServerUrl
+    fun shouldShowOnboarding(): Boolean = !onboardingCompleted
 
+    /**
+     * Users who installed a version without onboarding already have a server
+     * address or a token. Treat them as done, but only on the first launch
+     * after the update; later launches must not re-run this check — otherwise
+     * an onboarding abandoned after the server step would never show again.
+     */
     fun migrateExistingUsersIfNeeded() {
+        if (prefs.getBoolean(KEY_ONBOARDING_MIGRATION_CHECKED, false)) return
+        prefs.edit().putBoolean(KEY_ONBOARDING_MIGRATION_CHECKED, true).apply()
         if (hasAccessToken || hasExplicitServerUrl) {
             onboardingCompleted = true
         }
@@ -124,9 +138,11 @@ class ApiSettingsStore(context: Context) {
     }
 
     fun loadSettings(selectedAppId: String? = null): ApiSettings {
+        if (baseUrl.isEmpty()) throw IllegalStateException("missing_server_url")
         val url = makeBaseUrl(baseUrl) ?: throw IllegalStateException("invalid_base_url")
         val trimmedSelected = selectedAppId?.trim().orEmpty()
-        val resolvedAppId = trimmedSelected.ifEmpty { appId }.ifEmpty { DEFAULT_APP_ID }
+        val resolvedAppId = trimmedSelected.ifEmpty { appId }
+        if (resolvedAppId.isEmpty()) throw IllegalStateException("missing_app_id")
         val token = accessToken
         if (token.isEmpty()) throw IllegalStateException("missing_token")
         return ApiSettings(baseUrl = url, appId = resolvedAppId, accessToken = token)
@@ -142,8 +158,11 @@ class ApiSettingsStore(context: Context) {
     }
 
     companion object {
-        const val DEFAULT_BASE_URL = "https://eneo.kommun.se"
-        const val DEFAULT_APP_ID = "3412dabc-7343-49bb-b3bc-9f99204d10b2"
+        /** No server is assumed; onboarding asks for it. */
+        const val DEFAULT_BASE_URL = ""
+
+        /** No app is chosen until the user picks one. */
+        const val DEFAULT_APP_ID = ""
 
         private const val PREFS_NAME = "eneo_settings"
         private const val KEY_BASE_URL = "eneoBaseURLString"
@@ -153,6 +172,7 @@ class ApiSettingsStore(context: Context) {
         private const val KEY_ACCESS_TOKEN = "accessToken"
         private const val KEY_PENDING_STATE = "eneoPendingAuthState"
         private const val KEY_ONBOARDING_COMPLETED = "onboardingCompleted"
+        private const val KEY_ONBOARDING_MIGRATION_CHECKED = "onboardingMigrationChecked"
 
         fun normalizedBaseUrl(value: String): String {
             var trimmed = value.trim()

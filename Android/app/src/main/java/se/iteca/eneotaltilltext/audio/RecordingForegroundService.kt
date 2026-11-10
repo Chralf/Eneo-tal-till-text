@@ -16,8 +16,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeoutOrNull
 import se.iteca.eneotaltilltext.EneoApplication
 import se.iteca.eneotaltilltext.MainActivity
 import se.iteca.eneotaltilltext.R
@@ -27,6 +25,9 @@ class RecordingForegroundService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var observeJob: Job? = null
     private var wakeLock: PowerManager.WakeLock? = null
+
+    @Volatile
+    private var finalizing = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -38,20 +39,27 @@ class RecordingForegroundService : Service() {
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        // User swiped the app away — stop and save instead of recording in the background.
-        finalizeActiveRecording()
-        stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf()
-        super.onTaskRemoved(rootIntent)
-    }
-
-    private fun finalizeActiveRecording() {
-        val app = application as? EneoApplication ?: return
-        runBlocking {
-            withTimeoutOrNull(15_000L) {
-                app.container.repository.finalizeRecordingIfActive(app.container.audioRecorder)
+        // User swiped the app away. Keep this process alive until the merge finishes
+        // so a long recording is not cut off when the activity is already gone.
+        val app = application as? EneoApplication
+        if (app == null) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+            super.onTaskRemoved(rootIntent)
+            return
+        }
+        if (!finalizing) {
+            finalizing = true
+            scope.launch {
+                try {
+                    app.container.repository.finalizeRecordingIfActive(app.container.audioRecorder)
+                } finally {
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    stopSelf()
+                }
             }
         }
+        super.onTaskRemoved(rootIntent)
     }
 
     private fun startInForeground() {
@@ -68,7 +76,7 @@ class RecordingForegroundService : Service() {
         observeJob?.cancel()
         observeJob = scope.launch {
             recorder.state.collect { state ->
-                if (state == RecordingState.Idle) {
+                if (state == RecordingState.Idle && !finalizing && !recorder.isFinalizing.value) {
                     stopForeground(STOP_FOREGROUND_REMOVE)
                     stopSelf()
                 }

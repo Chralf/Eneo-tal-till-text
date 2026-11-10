@@ -90,6 +90,13 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        // Retention must also apply when the app is merely brought back from
+        // the background, not only at process start.
+        (application as EneoApplication).container.repository.purgeExpiredOnForeground()
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)

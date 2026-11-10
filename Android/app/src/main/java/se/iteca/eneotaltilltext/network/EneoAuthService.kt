@@ -2,6 +2,7 @@ package se.iteca.eneotaltilltext.network
 
 import android.content.Context
 import android.net.Uri
+import android.webkit.CookieManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -149,6 +150,10 @@ class EneoAuthService(
         _isSigningIn.value = false
         _statusText.value = null
         _error.value = null
+        // Clear login-service cookies so the next sign-in is not auto-filled
+        // from a previous web session.
+        CookieManager.getInstance().removeAllCookies(null)
+        CookieManager.getInstance().flush()
     }
 
     suspend fun verifySession() = withContext(Dispatchers.IO) {

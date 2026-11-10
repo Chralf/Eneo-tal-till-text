@@ -10,29 +10,49 @@ class RecordingMetadataParserTest {
     fun from_prefersExplicitTitleAndSummaryLabels() {
         val metadata = RecordingMetadataParser.from(
             """
-            Titel: Statusmöte
-            Sammanfattning: Kort genomgång av sprinten.
-            Mer text som inte ska bli titel.
+            # Mötesanteckningar
+            **Titel:** Budgetmöte oktober
+            Sammanfattning: Gruppen gick igenom utfallet.
+            - Punkt
             """.trimIndent(),
         )
-        assertEquals("Statusmöte", metadata.suggestedTitle)
-        assertEquals("Kort genomgång av sprinten.", metadata.shortSummary)
+        assertEquals("Budgetmöte oktober", metadata.suggestedTitle)
+        assertEquals("Gruppen gick igenom utfallet.", metadata.shortSummary)
     }
 
     @Test
     fun from_fallsBackToHeadingAndFirstParagraph() {
         val metadata = RecordingMetadataParser.from(
             """
-            # Rubrik från heading
-            Detta är ingressen som sammanfattar innehållet.
+            ## Planeringsmöte
+
+            - Första punkten
+            1. Numrerad punkt
+
+            Detta är det första riktiga stycket.
             """.trimIndent(),
         )
-        assertEquals("Rubrik från heading", metadata.suggestedTitle)
-        assertEquals("Detta är ingressen som sammanfattar innehållet.", metadata.shortSummary)
+        assertEquals("Planeringsmöte", metadata.suggestedTitle)
+        assertEquals("Detta är det första riktiga stycket.", metadata.shortSummary)
+    }
+
+    @Test
+    fun from_summaryDoesNotRepeatTheTitle() {
+        val metadata = RecordingMetadataParser.from("Bara en rad\nBara en rad\nAndra raden")
+        assertNull(metadata.suggestedTitle)
+        assertEquals("Bara en rad", metadata.shortSummary)
     }
 
     @Test
     fun from_truncatesLongValues() {
+        val longTitle = "a".repeat(80)
+        val metadata = RecordingMetadataParser.from("# $longTitle")
+        assertTrue(metadata.suggestedTitle!!.endsWith("..."))
+        assertEquals(63, metadata.suggestedTitle!!.length)
+    }
+
+    @Test
+    fun from_truncatesLongSummary() {
         val longTitle = "T".repeat(80)
         val longSummary = "S".repeat(150)
         val metadata = RecordingMetadataParser.from(
@@ -49,7 +69,7 @@ class RecordingMetadataParserTest {
 
     @Test
     fun from_emptyMarkdownReturnsNulls() {
-        val metadata = RecordingMetadataParser.from("\n\n")
+        val metadata = RecordingMetadataParser.from("\n\n   \n")
         assertNull(metadata.suggestedTitle)
         assertNull(metadata.shortSummary)
     }

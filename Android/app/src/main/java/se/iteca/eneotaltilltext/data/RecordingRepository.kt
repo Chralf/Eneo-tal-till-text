@@ -11,6 +11,7 @@ import kotlinx.coroutines.withContext
 import se.iteca.eneotaltilltext.audio.AudioRecorder
 import se.iteca.eneotaltilltext.audio.RecordingState
 import se.iteca.eneotaltilltext.util.Formatters
+import java.io.File
 import java.util.concurrent.atomic.AtomicReference
 
 class RecordingRepository(
@@ -80,17 +81,32 @@ class RecordingRepository(
         activeRecordingId.set(id)
     }
 
+    fun pendingPartFiles(recording: RecordingEntity): List<File> =
+        fileStore.pendingPartFiles(recording.audioFileName)
+
+    /**
+     * Merges leftover segments when a recording's final file is missing.
+     * Parts stay on disk if the merge fails.
+     */
+    suspend fun recoverAudioFile(recording: RecordingEntity): Boolean = withContext(Dispatchers.IO) {
+        if (fileStore.exists(recording)) return@withContext true
+        val session = fileStore.mergePendingParts(recording.audioFileName) ?: return@withContext false
+        if (session.duration > 0) {
+            dao.update(recording.copy(duration = session.duration))
+        }
+        true
+    }
+
     /**
      * Stops an in-progress recording when the user removes the app from Recents,
      * concatenates segments, and persists the final duration.
+     * The merge itself runs on [Dispatchers.IO] inside [AudioRecorder.stop].
      */
     suspend fun finalizeRecordingIfActive(recorder: AudioRecorder): Boolean {
-        if (recorder.state.value == RecordingState.Idle) return false
+        if (recorder.state.value == RecordingState.Idle && !recorder.isFinalizing.value) return false
         val fileName = recorder.sessionFinalFile?.name
-        val duration = withContext(Dispatchers.Main.immediate) {
-            recorder.onSegmentFinalized = null
-            recorder.stop()
-        }
+        recorder.onSegmentFinalized = null
+        val duration = recorder.stop()
         val id = activeRecordingId.getAndSet(null)
         val existing = when {
             id != null -> dao.getById(id)
@@ -124,6 +140,17 @@ class RecordingRepository(
             recoverSegmentSessions(recorder)
             refreshMissingDurations()
             recoverOrphanAudioFiles()
+            purgeExpiredRecordings()
+        }
+    }
+
+    /**
+     * Applies the retention setting. Also run when the app returns to the
+     * foreground: Android can keep the process alive for days, so launch alone
+     * would let expired audio linger past the configured limit.
+     */
+    fun purgeExpiredOnForeground() {
+        scope.launch {
             purgeExpiredRecordings()
         }
     }
@@ -192,7 +219,11 @@ class RecordingRepository(
      * and refresh/create the matching DB row.
      */
     private suspend fun recoverSegmentSessions(recorder: AudioRecorder?) {
-        if (recorder != null && recorder.state.value != RecordingState.Idle) return
+        if (recorder != null &&
+            (recorder.state.value != RecordingState.Idle || recorder.isFinalizing.value)
+        ) {
+            return
+        }
 
         fileStore.recoverSegmentSessions().forEach { session ->
             val existing = dao.getAll().firstOrNull { it.audioFileName == session.finalFile.name }

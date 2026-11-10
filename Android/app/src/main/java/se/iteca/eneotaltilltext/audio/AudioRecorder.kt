@@ -8,6 +8,7 @@ import android.os.SystemClock
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -15,6 +16,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.log10
 import se.iteca.eneotaltilltext.data.RecordingEntity
 import java.io.File
@@ -51,6 +56,13 @@ class AudioRecorder(context: Context) {
     private val _reachedMaxDuration = MutableStateFlow(false)
     val reachedMaxDuration: StateFlow<Boolean> = _reachedMaxDuration.asStateFlow()
 
+    /**
+     * True from stop until the final audio file has been written. The UI must
+     * not start a new session or dismiss while this is set.
+     */
+    private val _isFinalizing = MutableStateFlow(false)
+    val isFinalizing: StateFlow<Boolean> = _isFinalizing.asStateFlow()
+
     /** Final target file (`recording_<epoch>.m4a`) after session stop/concat. */
     var sessionFinalFile: File? = null
         private set
@@ -78,6 +90,8 @@ class AudioRecorder(context: Context) {
     private var pauseStartedElapsed = 0L
     private var shouldResumeAfterInterruption = false
     private var focusRequest: AudioFocusRequest? = null
+    private val stopMutex = Mutex()
+    private val discardRequested = AtomicBoolean(false)
 
     val isNearMaxDuration: Boolean
         get() = _recordingTime.value >= RecordingEntity.MAX_RECORDING_DURATION_SECONDS - 60
@@ -87,6 +101,7 @@ class AudioRecorder(context: Context) {
      * (`recording_<epoch>.m4a`); audio is written to `_p001`, `_p002`, … until stop.
      */
     fun start(finalFile: File) {
+        if (_isFinalizing.value) return
         if (_state.value != RecordingState.Idle) return
         val directory = finalFile.parentFile ?: return
         directory.mkdirs()
@@ -107,6 +122,7 @@ class AudioRecorder(context: Context) {
     }
 
     fun pause() {
+        if (_isFinalizing.value) return
         if (_state.value != RecordingState.Recording) return
         stopAutosaveTimer()
         stopMetering()
@@ -118,9 +134,17 @@ class AudioRecorder(context: Context) {
     }
 
     fun resume() {
+        if (_isFinalizing.value) return
         if (_state.value != RecordingState.Paused) return
         pausedAccumulated += SystemClock.elapsedRealtime() - pauseStartedElapsed
-        startNextSegment()
+        pauseStartedElapsed = 0L
+        try {
+            startNextSegment()
+        } catch (_: Exception) {
+            // Still paused: keep counting paused time so the clock stays right.
+            pauseStartedElapsed = SystemClock.elapsedRealtime()
+            return
+        }
         _wasInterrupted.value = false
         shouldResumeAfterInterruption = false
         _state.value = RecordingState.Recording
@@ -128,70 +152,102 @@ class AudioRecorder(context: Context) {
         startAutosaveTimer()
     }
 
-    fun stop(): Double {
-        stopAutosaveTimer()
-        stopMetering()
-        if (segmentRecorder != null) {
-            finalizeCurrentSegment(addToCompleted = true)
-        }
-        val duration = totalElapsedSeconds().coerceAtMost(RecordingEntity.MAX_RECORDING_DURATION_SECONDS)
-        lastCompletedDuration = duration
-
-        val finalFile = sessionFinalFile
-        val parts = completedParts.toList()
-        if (finalFile != null && parts.isNotEmpty()) {
-            val ok = M4aSegmentConcatenator.concatenate(parts, finalFile)
-            if (ok) {
-                parts.filter { M4aSegmentConcatenator.isReadableAudioPart(it) }.forEach { part ->
-                    if (part.absolutePath != finalFile.absolutePath) part.delete()
+    /**
+     * Stops capture and merges segments. The merge runs off the main thread and
+     * does not delete parts when it fails, so a later recovery can try again.
+     * State stays non-idle until the merge finishes, which keeps the foreground
+     * service alive. [isFinalizing] lets the UI hide controls and block a new
+     * session. A second stop while the first merge is still running must not
+     * re-run the merge.
+     */
+    suspend fun stop(): Double = withContext(NonCancellable) {
+        stopMutex.withLock {
+            if (_isFinalizing.value) {
+                return@withLock lastCompletedDuration
+            }
+            if (_state.value == RecordingState.Idle && segmentRecorder == null && completedParts.isEmpty()) {
+                return@withLock lastCompletedDuration
+            }
+            _isFinalizing.value = true
+            try {
+                stopAutosaveTimer()
+                stopMetering()
+                if (segmentRecorder != null) {
+                    finalizeCurrentSegment(addToCompleted = true)
                 }
-            } else {
-                val fallback = parts
-                    .filter { M4aSegmentConcatenator.isReadableAudioPart(it) }
-                    .maxByOrNull { it.length() }
-                if (fallback != null && M4aSegmentConcatenator.copyPartToOutput(fallback, finalFile)) {
-                    listOf(fallback).forEach { part ->
+                val duration = totalElapsedSeconds().coerceAtMost(RecordingEntity.MAX_RECORDING_DURATION_SECONDS)
+                lastCompletedDuration = duration
+                abandonAudioFocus()
+
+                val finalFile = sessionFinalFile
+                val parts = completedParts.toList()
+                val merged = if (finalFile != null && parts.isNotEmpty() && !discardRequested.get()) {
+                    withContext(Dispatchers.IO) {
+                        M4aSegmentConcatenator.concatenate(parts, finalFile)
+                    }
+                } else {
+                    false
+                }
+                if (discardRequested.getAndSet(false)) {
+                    parts.forEach { part ->
+                        if (finalFile == null || part.absolutePath != finalFile.absolutePath) part.delete()
+                    }
+                    finalFile?.delete()
+                } else if (merged && finalFile != null) {
+                    parts.forEach { part ->
                         if (part.absolutePath != finalFile.absolutePath) part.delete()
                     }
                 }
+
+                clearSessionLists()
+                _state.value = RecordingState.Idle
+                _audioLevels.value = emptyList()
+                _recordingTime.value = 0.0
+                shouldResumeAfterInterruption = false
+                _wasInterrupted.value = false
+                onSegmentFinalized = null
+                duration
+            } finally {
+                _isFinalizing.value = false
             }
         }
-
-        abandonAudioFocus()
-        clearSessionLists()
-        _state.value = RecordingState.Idle
-        _audioLevels.value = emptyList()
-        _recordingTime.value = 0.0
-        shouldResumeAfterInterruption = false
-        _wasInterrupted.value = false
-        return duration
     }
 
     fun cancel(deleteFile: Boolean = true) {
-        stopAutosaveTimer()
-        stopMetering()
-        runCatching { segmentRecorder?.cancel() }
-        segmentRecorder = null
-        abandonAudioFocus()
-
-        if (deleteFile) {
-            completedParts.forEach { it.delete() }
-            openPartFile()?.delete()
-            sessionFinalFile?.delete()
+        if (deleteFile) discardRequested.set(true)
+        if (!stopMutex.tryLock()) {
+            // stop() holds the lock while merging. It deletes the result when it sees the flag.
+            return
         }
+        try {
+            stopAutosaveTimer()
+            stopMetering()
+            runCatching { segmentRecorder?.cancel() }
+            segmentRecorder = null
+            abandonAudioFocus()
 
-        clearSessionLists()
-        sessionFinalFile = null
-        sessionDirectory = null
-        sessionBaseName = null
-        _state.value = RecordingState.Idle
-        _recordingTime.value = 0.0
-        _audioLevels.value = emptyList()
-        shouldResumeAfterInterruption = false
-        _wasInterrupted.value = false
-        _reachedMaxDuration.value = false
-        lastCompletedDuration = 0.0
-        onSegmentFinalized = null
+            if (deleteFile) {
+                completedParts.forEach { it.delete() }
+                openPartFile()?.delete()
+                sessionFinalFile?.delete()
+            }
+            discardRequested.set(false)
+
+            clearSessionLists()
+            sessionFinalFile = null
+            sessionDirectory = null
+            sessionBaseName = null
+            _state.value = RecordingState.Idle
+            _recordingTime.value = 0.0
+            _audioLevels.value = emptyList()
+            shouldResumeAfterInterruption = false
+            _wasInterrupted.value = false
+            _reachedMaxDuration.value = false
+            lastCompletedDuration = 0.0
+            onSegmentFinalized = null
+        } finally {
+            stopMutex.unlock()
+        }
     }
 
     private fun startNextSegment() {
@@ -248,7 +304,7 @@ class AudioRecorder(context: Context) {
         }
     }
 
-    private fun rotateSegment() {
+    private suspend fun rotateSegment() {
         if (_state.value != RecordingState.Recording) return
         finalizeCurrentSegment(addToCompleted = true)
         notifySegmentFinalized()
@@ -259,7 +315,17 @@ class AudioRecorder(context: Context) {
             _recordingTime.value = RecordingEntity.MAX_RECORDING_DURATION_SECONDS
             return
         }
-        startNextSegment()
+        try {
+            startNextSegment()
+        } catch (_: Exception) {
+            // Leave session paused-like if we cannot open the next part.
+            // Mark when the pause began so the clock stops with it.
+            _state.value = RecordingState.Paused
+            pauseStartedElapsed = SystemClock.elapsedRealtime()
+            _wasInterrupted.value = true
+            stopAutosaveTimer()
+            stopMetering()
+        }
     }
 
     private fun openPartFile(): File? {
@@ -393,6 +459,7 @@ class AudioRecorder(context: Context) {
     }
 
     private fun resetSessionState() {
+        discardRequested.set(false)
         completedParts.clear()
         completedDurationSeconds = 0.0
         pausedAccumulated = 0L

@@ -28,6 +28,9 @@
     "Ändra serveradress" : {
 
     },
+    "Ange adressen till din organisations Eneo under Inställningar." : {
+      "comment" : "Åtgärd när serveradress saknas"
+    },
     "Ange adressen till din organisations Eneo-server." : {
 
     },
@@ -107,6 +110,9 @@
       "comment" : "Lista över filformat som stöds"
     },
     "Du kan nu välja vilken Eneo-app som ska användas för transkriberingar." : {
+
+    },
+    "Du kan slutföra ändå och välja app senare under Inställningar." : {
 
     },
     "Du kan spela in och hantera inspelningar utan nät. Inloggning sker när du omvandlar till text — då behöver du nå Eneo-servern." : {
@@ -225,6 +231,9 @@
     },
     "Ingen internetanslutning" : {
       "comment" : "Rubrik när enheten saknar nätverk"
+    },
+    "Ingen serveradress är angiven" : {
+      "comment" : "Rubrik när Eneo-adressen saknas helt"
     },
     "Inloggad" : {
 
@@ -460,6 +469,9 @@
     "Oväntat svar från Eneo" : {
       "comment" : "Rubrik när inloggningssvaret inte är giltig HTTP\nRubrik när svaret inte är giltig HTTP"
     },
+    "Pausa" : {
+
+    },
     "Pausa inspelning" : {
 
     },
@@ -542,9 +554,6 @@
         }
       }
     },
-    "Stoppa" : {
-
-    },
     "Stoppa och spara inspelning" : {
 
     },
@@ -590,6 +599,12 @@
     "Utvecklingen sker på fritiden, vid sidan av ordinarie arbete. Vill din verksamhet säkra fortsatt drift och vidareutveckling finns supportavtal — mejla christian@iteca.se så återkommer jag med upplägg." : {
 
     },
+    "Välj app" : {
+      "comment" : "Visas i Inställningar när ingen förvald Eneo-app är vald"
+    },
+    "Välj Eneo-app" : {
+      "comment" : "Visas i appraden när ingen Eneo-app är vald"
+    },
     "Välj Eneo-app. Kräver nätverk och inloggning." : {
 
     },
@@ -604,6 +619,9 @@
     },
     "Välj vilken Eneo-app som ska användas under Inställningar." : {
       "comment" : "Åtgärd när app saknas"
+    },
+    "Välj vilken Eneo-app som ska omvandla inspelningen. Du kan också välja en förvald app under Inställningar." : {
+
     },
     "Välkommen" : {
 

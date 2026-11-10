@@ -6,18 +6,30 @@ import android.media.MediaFormat
 import android.media.MediaMuxer
 import java.io.File
 import java.nio.ByteBuffer
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Concatenates AAC-in-M4A segment files into a single M4A via MediaExtractor + MediaMuxer.
  */
 object M4aSegmentConcatenator {
+    /** One lock per final file so launch recovery and the detail view cannot write the same temp file at once. */
+    private val outputLocks = ConcurrentHashMap<String, Any>()
+
     fun concatenate(parts: List<File>, output: File): Boolean {
+        val lock = outputLocks.getOrPut(output.absolutePath) { Any() }
+        return synchronized(lock) {
+            merge(parts, output)
+        }
+    }
+
+    private fun merge(parts: List<File>, output: File): Boolean {
         val readable = parts.filter { isReadableAudioPart(it) }
-        if (readable.isEmpty()) return false
+        if (readable.isEmpty()) {
+            return output.exists() && output.length() > 1024
+        }
         if (readable.size == 1) {
             return copyPartToOutput(readable[0], output)
         }
-        if (output.exists()) output.delete()
         val tempOutput = File(output.parentFile, "${output.nameWithoutExtension}_concat_tmp.m4a")
         if (tempOutput.exists()) tempOutput.delete()
 

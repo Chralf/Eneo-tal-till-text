@@ -27,7 +27,7 @@ struct OnboardingView: View {
 
     let onComplete: () -> Void
 
-    @AppStorage("eneoAppID") private var selectedAppID = APISettings.defaultAppID
+    @AppStorage(APISettings.appIDStorageKey) private var selectedAppID = APISettings.defaultAppID
 
     @State private var step: OnboardingStep = .welcome
     @State private var serverURLDraft = ""
@@ -95,6 +95,13 @@ struct OnboardingView: View {
         .task(id: step) {
             if step == .selectApp, availableApps.isEmpty, !isLoadingApps {
                 await loadApps()
+            }
+        }
+        .onAppear {
+            // An onboarding abandoned after the server step starts over, but
+            // the address already entered should not have to be typed again.
+            if serverURLDraft.isEmpty {
+                serverURLDraft = OnboardingStore.storedServerURLString
             }
         }
     }
@@ -254,6 +261,9 @@ struct OnboardingView: View {
             } else if let appLoadError {
                 Text(appLoadError.message ?? appLoadError.title)
                     .foregroundStyle(.secondary)
+                Text("Du kan slutföra ändå och välja app senare under Inställningar.")
+                    .font(.footnote)
+                    .foregroundStyle(.tertiary)
             } else {
                 appSections
             }
@@ -338,7 +348,9 @@ struct OnboardingView: View {
         case .login:
             loginActions
         case .selectApp:
-            primaryButton("Slutför", disabled: selectedAppID.isEmpty || isLoadingApps) {
+            // With a load error the user may finish anyway and pick an app
+            // later; otherwise a choice is required.
+            primaryButton("Slutför", disabled: isLoadingApps || (selectedAppID.isEmpty && appLoadError == nil)) {
                 OnboardingStore.markCompleted()
                 onComplete()
             }
@@ -508,7 +520,8 @@ struct OnboardingView: View {
             let apps = try await uploadService.fetchApps()
             availableApps = apps
             if apps.contains(where: { $0.id == selectedAppID }) == false {
-                selectedAppID = apps.first?.id ?? APISettings.defaultAppID
+                // Preselect only when there is nothing to choose between.
+                selectedAppID = apps.count == 1 ? apps[0].id : ""
             }
             if let app = apps.first(where: { $0.id == selectedAppID }) {
                 APISettings.persistDefaultAppDisplayName(from: app)

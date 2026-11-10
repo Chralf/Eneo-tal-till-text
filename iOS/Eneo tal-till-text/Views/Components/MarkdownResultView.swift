@@ -188,7 +188,8 @@ struct MarkdownResultView: View, Equatable {
 
 // MARK: - Parser
 
-private enum MarkdownBlockParser {
+/// Internal rather than private so the parsing rules can be unit tested.
+enum MarkdownBlockParser {
     static func parse(_ markdown: String) -> [MarkdownBlock] {
         let lines = markdown
             .replacingOccurrences(of: "\r\n", with: "\n")
@@ -575,12 +576,12 @@ private enum MarkdownBlockParser {
     }
 }
 
-private struct MarkdownBlock {
+struct MarkdownBlock: Equatable {
     let kind: MarkdownBlockKind
     let text: String
 }
 
-private enum MarkdownBlockKind {
+enum MarkdownBlockKind: Equatable {
     case heading(level: Int)
     case paragraph
     case bullet(depth: Int)

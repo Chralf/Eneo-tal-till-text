@@ -8,7 +8,7 @@ struct SettingsView: View {
     @Environment(EneoAuthService.self) private var authService
 
     @AppStorage(APISettings.baseURLStorageKey) private var storedBaseURLString = APISettings.defaultBaseURLString
-    @AppStorage("eneoAppID") private var appID = APISettings.defaultAppID
+    @AppStorage(APISettings.appIDStorageKey) private var appID = APISettings.defaultAppID
     @AppStorage(RecordingRetention.storageKey) private var retentionDays = RecordingRetention.defaultDays
 
     @State private var draftBaseURLString = ""
@@ -30,12 +30,26 @@ struct SettingsView: View {
         APISettings.makeBaseURL(from: draftBaseURLString) != nil
     }
 
+    private var hasDefaultApp: Bool {
+        !appID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     private var defaultAppDisplayName: String {
+        guard hasDefaultApp else {
+            return String(localized: "Välj app", comment: "Visas i Inställningar när ingen förvald Eneo-app är vald")
+        }
         if let app = availableApps.first(where: { $0.id == appID }) {
             return app.displayName
         }
         return APISettings.storedDefaultAppDisplayName()
             ?? String(localized: "Förvald app", comment: "Visas tills namnet på förvald Eneo-app har hämtats")
+    }
+
+    /// Keeps the stored default consistent with what the server offers: a
+    /// vanished app is cleared, a sole app is taken, otherwise the user picks.
+    private func reconcileDefaultApp(with apps: [EneoApp]) {
+        if apps.contains(where: { $0.id == appID }) { return }
+        appID = apps.count == 1 ? apps[0].id : ""
     }
 
     private var appIDBinding: Binding<String> {
@@ -182,7 +196,7 @@ struct SettingsView: View {
     @ViewBuilder
     private var serverSection: some View {
         Section {
-            TextField("Serveradress", text: $draftBaseURLString)
+            TextField("Serveradress", text: $draftBaseURLString, prompt: Text(verbatim: "https://eneo.dinorganisation.se"))
                 #if os(iOS)
                 .textInputAutocapitalization(.never)
                 .keyboardType(.URL)
@@ -259,7 +273,7 @@ struct SettingsView: View {
                 } label: {
                     HStack(alignment: .center, spacing: 12) {
                         Text(defaultAppDisplayName)
-                            .foregroundStyle(.primary)
+                            .foregroundStyle(hasDefaultApp ? AnyShapeStyle(.primary) : AnyShapeStyle(.tint))
                             .multilineTextAlignment(.leading)
                             .lineLimit(3)
                             .fixedSize(horizontal: false, vertical: true)
@@ -471,9 +485,7 @@ struct SettingsView: View {
                 personalSpaceID = await uploadService.fetchPersonalSpaceId()
                 let apps = try await uploadService.fetchApps()
                 availableApps = apps
-                if !apps.contains(where: { $0.id == appID }), let firstApp = apps.first {
-                    appID = firstApp.id
-                }
+                reconcileDefaultApp(with: apps)
                 persistSelectedDefaultApp()
                 presentNotice(
                     title: String(localized: "Kommunikation OK", comment: "Rubrik när alla kommunikationstester lyckas"),
@@ -501,9 +513,7 @@ struct SettingsView: View {
                 personalSpaceID = await uploadService.fetchPersonalSpaceId()
                 let apps = try await uploadService.fetchApps()
                 availableApps = apps
-                if !apps.contains(where: { $0.id == appID }), let firstApp = apps.first {
-                    appID = firstApp.id
-                }
+                reconcileDefaultApp(with: apps)
                 persistSelectedDefaultApp()
                 if openPickerWhenDone {
                     showAppPicker = true

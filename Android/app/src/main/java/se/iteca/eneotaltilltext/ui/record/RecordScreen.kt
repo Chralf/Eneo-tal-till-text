@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.StopCircle
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -65,6 +66,9 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import se.iteca.eneotaltilltext.R
@@ -89,7 +93,9 @@ fun RecordScreen(
     val levels by recorder.audioLevels.collectAsStateWithLifecycle()
     val wasInterrupted by recorder.wasInterrupted.collectAsStateWithLifecycle()
     val reachedMax by recorder.reachedMaxDuration.collectAsStateWithLifecycle()
+    val isFinalizing by recorder.isFinalizing.collectAsStateWithLifecycle()
     val errorMessage by viewModel.errorMessage.collectAsStateWithLifecycle()
+    val lifecycleOwner = LocalLifecycleOwner.current
 
     var permissionGranted by remember {
         mutableStateOf(
@@ -119,8 +125,24 @@ fun RecordScreen(
         if (needed.isNotEmpty()) permissionLauncher.launch(needed.toTypedArray())
     }
 
-    DisposableEffect(state) {
-        val keepAwake = state != RecordingState.Idle
+    DisposableEffect(lifecycleOwner) {
+        // The user may have enabled microphone access in Settings and come
+        // straight back; the record button must follow suit.
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME && !permissionGranted) {
+                permissionGranted = ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.RECORD_AUDIO,
+                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                if (permissionGranted) showPermissionAlert = false
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    DisposableEffect(state, isFinalizing) {
+        val keepAwake = state != RecordingState.Idle || isFinalizing
         val activity = context as? android.app.Activity
         val window = activity?.window
         view.keepScreenOn = keepAwake
@@ -135,23 +157,26 @@ fun RecordScreen(
         }
     }
 
-    BackHandler(enabled = state != RecordingState.Idle) {
+    BackHandler(enabled = state != RecordingState.Idle || isFinalizing) {
+        if (isFinalizing) return@BackHandler
         showDiscardConfirmation = true
     }
 
     LaunchedEffect(reachedMax) {
         if (reachedMax) {
-            val saved = viewModel.finalizeRecording(fromMaxDuration = true)
-            if (saved != null) {
-                finishedFromMax = saved
-                showMaxDurationAlert = true
+            viewModel.finalizeRecording(fromMaxDuration = true) { saved ->
+                if (saved != null) {
+                    finishedFromMax = saved
+                    showMaxDurationAlert = true
+                }
             }
         }
     }
 
     fun finishAndClose() {
-        val saved = viewModel.finalizeRecording(fromMaxDuration = false)
-        if (saved != null) onFinished(saved) else onDismiss()
+        viewModel.finalizeRecording(fromMaxDuration = false) { saved ->
+            if (saved != null) onFinished(saved) else onDismiss()
+        }
     }
 
     Scaffold(
@@ -159,16 +184,14 @@ fun RecordScreen(
             TopAppBar(
                 title = { Text(stringResource(R.string.record_title)) },
                 navigationIcon = {
-                    TextButton(
-                        onClick = {
-                            if (state != RecordingState.Idle) {
-                                showDiscardConfirmation = true
-                            } else {
-                                onDismiss()
-                            }
-                        },
-                    ) {
-                        Text(if (state != RecordingState.Idle) stringResource(R.string.cancel) else stringResource(R.string.close))
+                    if (state != RecordingState.Idle) {
+                        TextButton(onClick = { showDiscardConfirmation = true }) {
+                            Text(stringResource(R.string.cancel))
+                        }
+                    } else if (!isFinalizing) {
+                        TextButton(onClick = onDismiss) {
+                            Text(stringResource(R.string.close))
+                        }
                     }
                 },
             )
@@ -205,12 +228,13 @@ fun RecordScreen(
                     .fillMaxWidth()
                     .height(80.dp),
             )
-            if (state == RecordingState.Recording || state == RecordingState.Paused) {
+            if (!isFinalizing && (state == RecordingState.Recording || state == RecordingState.Paused)) {
                 Spacer(Modifier.height(16.dp))
                 StatusLabel(state = state, wasInterrupted = wasInterrupted)
             }
             if (recordingTime >= RecordingEntity.MAX_RECORDING_DURATION_SECONDS - 60 &&
-                state != RecordingState.Idle
+                state != RecordingState.Idle &&
+                !isFinalizing
             ) {
                 Spacer(Modifier.height(8.dp))
                 Text(
@@ -220,17 +244,21 @@ fun RecordScreen(
                 )
             }
             Spacer(Modifier.weight(1f))
-            ControlButtons(
-                state = state,
-                permissionGranted = permissionGranted,
-                onStart = { viewModel.startRecording() },
-                onPause = { viewModel.pause() },
-                onResume = { viewModel.resume() },
-                onStop = { finishAndClose() },
-            )
+            if (isFinalizing) {
+                FinalizingLabel()
+            } else {
+                ControlButtons(
+                    state = state,
+                    permissionGranted = permissionGranted,
+                    onStart = { viewModel.startRecording() },
+                    onPause = { viewModel.pause() },
+                    onResume = { viewModel.resume() },
+                    onStop = { finishAndClose() },
+                )
+            }
             Spacer(Modifier.height(16.dp))
             AnimatedVisibility(
-                visible = state == RecordingState.Idle,
+                visible = state == RecordingState.Idle && !isFinalizing,
                 enter = fadeIn() + slideInVertically { it / 3 },
                 exit = fadeOut() + slideOutVertically { it / 3 },
             ) {
@@ -389,6 +417,22 @@ private fun IdleTips(onOpenInfo: () -> Unit) {
                 modifier = Modifier.weight(1f),
             )
         }
+    }
+}
+
+@Composable
+private fun FinalizingLabel() {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.height(72.dp),
+    ) {
+        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+        Text(
+            stringResource(R.string.record_saving),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

@@ -60,6 +60,10 @@ fun EneoLoginWebView(
         },
         onRelease = { webView ->
             webView.stopLoading()
+            // Drop login-service cookies when the sheet closes so a later
+            // "Logga ut" is not undermined by a remembered web session.
+            CookieManager.getInstance().removeAllCookies(null)
+            CookieManager.getInstance().flush()
             webView.destroy()
         },
     )

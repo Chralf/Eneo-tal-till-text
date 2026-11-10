@@ -213,9 +213,7 @@ class SettingsViewModel(
             try {
                 val apps = uploadService.fetchApps()
                 _availableApps.value = apps
-                if (apps.none { it.id == _appId.value }) {
-                    apps.firstOrNull()?.let { _appId.value = it.id }
-                }
+                reconcileDefaultApp(apps)
                 persistSelectedDefaultApp()
                 _notice.value = ErrorPresentation(
                     title = app.getString(R.string.settings_comm_ok_title),
@@ -241,9 +239,7 @@ class SettingsViewModel(
                 _personalSpaceId.value = uploadService.fetchPersonalSpaceId()
                 val apps = uploadService.fetchApps()
                 _availableApps.value = apps
-                if (apps.none { it.id == _appId.value }) {
-                    apps.firstOrNull()?.let { _appId.value = it.id }
-                }
+                reconcileDefaultApp(apps)
                 apps.firstOrNull { it.id == settingsStore.appId }?.let { defaultApp ->
                     settingsStore.persistDefaultAppDisplayName(defaultApp.name, defaultApp.spaceName, defaultApp.id)
                 }
@@ -261,6 +257,19 @@ class SettingsViewModel(
 
     fun storedDefaultAppDisplayName(): String? = settingsStore.storedDefaultAppDisplayName()
 
+    fun hasDefaultApp(): Boolean = _appId.value.trim().isNotEmpty()
+
+    /** Keeps the stored default consistent with what the server offers. */
+    private fun reconcileDefaultApp(apps: List<EneoApp>) {
+        if (apps.any { it.id == _appId.value }) return
+        _appId.value = if (apps.size == 1) apps[0].id else ""
+        settingsStore.appId = _appId.value
+        if (_appId.value.isEmpty()) {
+            settingsStore.defaultAppName = ""
+            settingsStore.defaultAppSpaceName = ""
+        }
+    }
+
     private fun commitServerChangeWithoutReachabilityRefresh() {
         val normalized = ApiSettingsStore.normalizedBaseUrl(_draftBaseUrl.value)
         if (ApiSettingsStore.makeBaseUrl(normalized) == null) return
@@ -274,7 +283,14 @@ class SettingsViewModel(
     }
 
     private fun persistSelectedDefaultApp() {
-        val appChoice = _availableApps.value.firstOrNull { it.id == _appId.value } ?: return
+        val trimmed = _appId.value.trim()
+        if (trimmed.isEmpty()) {
+            settingsStore.appId = ""
+            settingsStore.defaultAppName = ""
+            settingsStore.defaultAppSpaceName = ""
+            return
+        }
+        val appChoice = _availableApps.value.firstOrNull { it.id == trimmed } ?: return
         settingsStore.appId = appChoice.id
         settingsStore.persistDefaultAppDisplayName(appChoice.name, appChoice.spaceName, appChoice.id)
     }

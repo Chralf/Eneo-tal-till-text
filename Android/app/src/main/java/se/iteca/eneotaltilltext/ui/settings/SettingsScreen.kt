@@ -189,9 +189,13 @@ fun SettingsScreen(
             if (canManageAccount && isAuthenticated) {
                 HorizontalDivider()
                 SectionHeader(stringResource(R.string.settings_section_convert))
-                val selectedName = availableApps.firstOrNull { it.id == appId }?.displayName
-                    ?: viewModel.storedDefaultAppDisplayName()
-                    ?: stringResource(R.string.settings_default_app)
+                val hasDefaultApp = appId.trim().isNotEmpty()
+                val selectedName = when {
+                    !hasDefaultApp -> stringResource(R.string.settings_select_app)
+                    else -> availableApps.firstOrNull { it.id == appId }?.displayName
+                        ?: viewModel.storedDefaultAppDisplayName()
+                        ?: stringResource(R.string.settings_default_app)
+                }
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -201,7 +205,15 @@ fun SettingsScreen(
                         .padding(vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(selectedName, modifier = Modifier.weight(1f))
+                    Text(
+                        selectedName,
+                        modifier = Modifier.weight(1f),
+                        color = if (hasDefaultApp) {
+                            MaterialTheme.colorScheme.onSurface
+                        } else {
+                            MaterialTheme.colorScheme.primary
+                        },
+                    )
                     if (isSelectingApp) {
                         CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                     } else {

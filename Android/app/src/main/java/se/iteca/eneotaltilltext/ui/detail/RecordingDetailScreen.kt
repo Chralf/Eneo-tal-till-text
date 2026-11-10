@@ -25,10 +25,10 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -51,6 +51,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -71,6 +72,7 @@ import se.iteca.eneotaltilltext.markdown.MarkdownClipboard
 import se.iteca.eneotaltilltext.markdown.MarkdownExport
 import se.iteca.eneotaltilltext.ui.auth.EneoConnectSheet
 import se.iteca.eneotaltilltext.ui.components.EneoAppPickerDialog
+import se.iteca.eneotaltilltext.ui.components.ErrorNotice
 import se.iteca.eneotaltilltext.util.Formatters
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -98,6 +100,8 @@ fun RecordingDetailScreen(
     val position by viewModel.player.position.collectAsStateWithLifecycle()
     val duration by viewModel.player.duration.collectAsStateWithLifecycle()
     val playbackError by viewModel.player.error.collectAsStateWithLifecycle()
+    val isRecoveringAudio by viewModel.isRecoveringAudio.collectAsStateWithLifecycle()
+    val audioRecoveryFailed by viewModel.audioRecoveryFailed.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val shareResultChooserTitle = stringResource(R.string.detail_action_share_result)
 
@@ -113,12 +117,14 @@ fun RecordingDetailScreen(
     var showConnect by remember { mutableStateOf(false) }
     var pendingUploadAfterLogin by remember { mutableStateOf(false) }
     var pendingOpenAppPickerAfterLogin by remember { mutableStateOf(false) }
+    var pendingUploadAfterAppPick by remember { mutableStateOf(false) }
     var showAppPicker by remember { mutableStateOf(false) }
     var isInfoExpanded by remember { mutableStateOf(false) }
     var isPlaybackExpanded by remember { mutableStateOf(false) }
     var titleText by remember { mutableStateOf("") }
 
     val uploadingThis = isUploading && uploadingId == recordingId
+    val hasSelectedApp = selectedAppId.trim().isNotEmpty()
 
     val notificationLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -148,6 +154,26 @@ fun RecordingDetailScreen(
         }
     }
 
+    fun startUploadNow() {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            viewModel.upload()
+        }
+    }
+
+    fun startUploadAfterAuth() {
+        if (!viewModel.hasSelectedApp()) {
+            // Nothing to convert with yet: let the user pick an app and continue.
+            pendingUploadAfterAppPick = true
+            openAppPickerAfterAuth()
+            return
+        }
+        startUploadNow()
+    }
+
     fun requestUpload() {
         viewModel.clearPreflightError()
         viewModel.withServerReachable(forAppSelection = false) {
@@ -158,13 +184,7 @@ fun RecordingDetailScreen(
                 showConnect = true
                 return@withServerReachable
             }
-            if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
-                PackageManager.PERMISSION_GRANTED
-            ) {
-                notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-            } else {
-                viewModel.upload()
-            }
+            startUploadAfterAuth()
         }
     }
 
@@ -249,8 +269,15 @@ fun RecordingDetailScreen(
                 label = { Text(stringResource(R.string.detail_title_label)) },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = { viewModel.saveTitle(titleText) }),
+                keyboardActions = KeyboardActions(onDone = { viewModel.commitTitle(titleText) }),
             )
+
+            val latestTitle by rememberUpdatedState(titleText)
+            DisposableEffect(recordingId) {
+                onDispose {
+                    viewModel.commitTitle(latestTitle)
+                }
+            }
 
             ExpandableSection(
                 title = stringResource(R.string.detail_section_info),
@@ -268,7 +295,24 @@ fun RecordingDetailScreen(
                 }
             }
 
-            if (!viewModel.audioExists(current)) {
+            if (isRecoveringAudio) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp,
+                    )
+                    Text(
+                        stringResource(R.string.detail_audio_recovering),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            } else if (!viewModel.audioExists(current)) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -280,10 +324,19 @@ fun RecordingDetailScreen(
                         style = MaterialTheme.typography.titleSmall,
                     )
                     Text(
-                        stringResource(R.string.detail_audio_missing_message),
+                        if (audioRecoveryFailed) {
+                            stringResource(R.string.detail_audio_parts_message)
+                        } else {
+                            stringResource(R.string.detail_audio_missing_message)
+                        },
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    if (audioRecoveryFailed) {
+                        TextButton(onClick = { viewModel.retryAudioRecovery() }) {
+                            Text(stringResource(R.string.retry))
+                        }
+                    }
                 }
             }
 
@@ -297,13 +350,13 @@ fun RecordingDetailScreen(
                     enabled = viewModel.audioExists(current),
                 ) {
                     Icon(
-                        if (isPlaying) Icons.Filled.Stop else Icons.Filled.PlayArrow,
+                        if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
                         contentDescription = null,
                     )
                     Spacer(Modifier.padding(horizontal = 4.dp))
                     Text(
                         if (isPlaying) {
-                            stringResource(R.string.detail_action_stop)
+                            stringResource(R.string.detail_action_pause)
                         } else {
                             stringResource(R.string.detail_action_play)
                         },
@@ -344,6 +397,11 @@ fun RecordingDetailScreen(
                 Text(
                     viewModel.selectedAppDisplayName(current),
                     modifier = Modifier.weight(1f),
+                    color = if (hasSelectedApp) {
+                        MaterialTheme.colorScheme.onSurface
+                    } else {
+                        MaterialTheme.colorScheme.primary
+                    },
                 )
                 if (isCheckingServer || isLoadingApps) {
                     CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
@@ -351,6 +409,37 @@ fun RecordingDetailScreen(
                     Icon(Icons.Filled.ChevronRight, contentDescription = null)
                 }
             }
+            if (!hasSelectedApp) {
+                Text(
+                    stringResource(R.string.detail_select_app_footer),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            // A failed conversion stays visible, with its remedy, until the next
+            // attempt starts. An alert would vanish and take the explanation with it.
+            val uploadError = viewModel.uploadErrorPresentation(current)?.takeIf { !uploadingThis }
+            if (uploadError != null) {
+                ErrorNotice(
+                    presentation = uploadError,
+                    actionTitle = if (uploadError.requiresSignIn) {
+                        stringResource(R.string.sign_in_again)
+                    } else {
+                        stringResource(R.string.retry)
+                    },
+                    onAction = {
+                        if (uploadError.requiresSignIn) {
+                            pendingUploadAfterLogin = true
+                            pendingOpenAppPickerAfterLogin = false
+                            showConnect = true
+                        } else {
+                            requestUpload()
+                        }
+                    },
+                )
+            }
+
             val resultText = current.transcriptionText?.trim().orEmpty()
             if (resultText.isNotEmpty()) {
                 val export = remember(resultText) { MarkdownExport.fromMarkdown(resultText) }
@@ -416,17 +505,17 @@ fun RecordingDetailScreen(
             )
         }
     }
-    val notice = playbackNotice
-        ?: appLoadError
-        ?: preflightError
-        ?: viewModel.uploadErrorPresentation(current)?.takeIf { !uploadingThis }
+    // Transient errors (playback, server probe, app list) stay as alerts.
+    // Persisted upload failures use the inline ErrorNotice above.
+    val notice = playbackNotice ?: appLoadError ?: preflightError
 
     if (notice != null) {
         AlertDialog(
             onDismissRequest = {
                 playbackNotice = null
                 viewModel.player.clearError()
-                viewModel.dismissNotice()
+                viewModel.clearAppLoadError()
+                viewModel.clearPreflightError()
             },
             title = { Text(notice.title) },
             text = {
@@ -437,7 +526,8 @@ fun RecordingDetailScreen(
                     onClick = {
                         playbackNotice = null
                         viewModel.player.clearError()
-                        viewModel.dismissNotice()
+                        viewModel.clearAppLoadError()
+                        viewModel.clearPreflightError()
                     },
                 ) {
                     Text(stringResource(R.string.ok))
@@ -474,9 +564,31 @@ fun RecordingDetailScreen(
             apps = availableApps,
             selectedAppId = selectedAppId,
             personalSpaceId = personalSpaceId,
-            onSelect = viewModel::setSelectedApp,
-            onDismiss = { showAppPicker = false },
+            onSelect = { appId ->
+                viewModel.setSelectedApp(appId)
+                if (pendingUploadAfterAppPick && appId.trim().isNotEmpty()) {
+                    pendingUploadAfterAppPick = false
+                    showAppPicker = false
+                    startUploadNow()
+                }
+            },
+            onDismiss = {
+                showAppPicker = false
+                pendingUploadAfterAppPick = false
+            },
         )
+    }
+
+    // The only available app was taken automatically; no need to confirm in the picker.
+    LaunchedEffect(selectedAppId, availableApps.size, pendingUploadAfterAppPick) {
+        if (pendingUploadAfterAppPick &&
+            selectedAppId.trim().isNotEmpty() &&
+            availableApps.size == 1
+        ) {
+            pendingUploadAfterAppPick = false
+            showAppPicker = false
+            startUploadNow()
+        }
     }
 
     if (showDelete) {

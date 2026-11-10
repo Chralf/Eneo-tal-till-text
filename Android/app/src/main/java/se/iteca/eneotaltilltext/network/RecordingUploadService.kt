@@ -57,7 +57,9 @@ class RecordingUploadService(
         .build()
 
     fun loadSettings(selectedAppId: String? = null): ApiSettings {
-        val baseUrl = ApiSettingsStore.makeBaseUrl(settingsStore.baseUrl)
+        val rawBaseUrl = settingsStore.baseUrl.trim()
+        if (rawBaseUrl.isEmpty()) throw RecordingUploadErrors.missingServerUrl(context)
+        val baseUrl = ApiSettingsStore.makeBaseUrl(rawBaseUrl)
             ?: throw RecordingUploadErrors.missingApiSettings(context)
         val trimmedSelected = selectedAppId?.trim().orEmpty()
         val appId = trimmedSelected.ifEmpty { settingsStore.appId }.ifEmpty {
@@ -94,7 +96,9 @@ class RecordingUploadService(
      * (even 401/404). Connection failures surface as network guidance.
      */
     suspend fun probeServerReachability() = withContext(Dispatchers.IO) {
-        val baseUrl = ApiSettingsStore.makeBaseUrl(settingsStore.baseUrl)
+        val rawBaseUrl = settingsStore.baseUrl.trim()
+        if (rawBaseUrl.isEmpty()) throw RecordingUploadErrors.missingServerUrl(context)
+        val baseUrl = ApiSettingsStore.makeBaseUrl(rawBaseUrl)
             ?: throw RecordingUploadErrors.missingApiSettings(context)
         val probeClient = client.newBuilder()
             .connectTimeout(12, TimeUnit.SECONDS)
@@ -329,7 +333,7 @@ class RecordingUploadService(
 
     private fun statusTextFor(status: String): String = when (status) {
         "queued", "pending", "created" -> context.getString(R.string.status_transcribing)
-        "running", "processing", "in_progress", "started" -> context.getString(R.string.status_summarizing)
+        "running", "processing", "in_progress", "in progress", "started" -> context.getString(R.string.status_summarizing)
         "complete", "completed", "success", "succeeded", "done", "finished" -> context.getString(R.string.status_downloading)
         else -> context.getString(R.string.status_generic)
     }

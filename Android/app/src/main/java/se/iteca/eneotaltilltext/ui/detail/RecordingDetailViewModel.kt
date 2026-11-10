@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -28,6 +29,7 @@ import se.iteca.eneotaltilltext.network.EneoAuthService
 import se.iteca.eneotaltilltext.network.RecordingUploadService
 import se.iteca.eneotaltilltext.network.UploadForegroundService
 import se.iteca.eneotaltilltext.network.formatAppDisplayName
+import se.iteca.eneotaltilltext.util.Formatters
 
 class RecordingDetailViewModel(
     application: Application,
@@ -62,9 +64,16 @@ class RecordingDetailViewModel(
     private val _isCheckingServer = MutableStateFlow(false)
     val isCheckingServer: StateFlow<Boolean> = _isCheckingServer.asStateFlow()
 
+    private val _isRecoveringAudio = MutableStateFlow(false)
+    val isRecoveringAudio: StateFlow<Boolean> = _isRecoveringAudio.asStateFlow()
+
+    private val _audioRecoveryFailed = MutableStateFlow(false)
+    val audioRecoveryFailed: StateFlow<Boolean> = _audioRecoveryFailed.asStateFlow()
+
     private val _isScrubbing = MutableStateFlow(false)
     private var pollJob: Job? = null
     private var loadedDurationForId: String? = null
+    private var isDeleted = false
 
     init {
         viewModelScope.launch {
@@ -97,13 +106,63 @@ class RecordingDetailViewModel(
                 delay(200)
             }
         }
+        viewModelScope.launch {
+            recording.filterNotNull().first()
+            recoverMissingAudioIfPossible()
+        }
+    }
+
+    fun retryAudioRecovery() {
+        viewModelScope.launch {
+            recoverMissingAudioIfPossible()
+        }
+    }
+
+    private suspend fun recoverMissingAudioIfPossible() {
+        if (_isRecoveringAudio.value) return
+        val current = repository.get(recordingId) ?: return
+        if (repository.audioExists(current)) {
+            _audioRecoveryFailed.value = false
+            return
+        }
+        if (repository.pendingPartFiles(current).isEmpty()) {
+            _audioRecoveryFailed.value = false
+            return
+        }
+        _isRecoveringAudio.value = true
+        _audioRecoveryFailed.value = false
+        val recovered = repository.recoverAudioFile(current)
+        _isRecoveringAudio.value = false
+        _audioRecoveryFailed.value = !recovered
+        if (recovered) {
+            val updated = repository.get(recordingId) ?: current
+            loadedDurationForId = updated.id
+            player.loadDuration(repository.fileFor(updated), updated.duration)
+        }
     }
 
     fun saveTitle(title: String) {
+        if (isDeleted) return
         val trimmed = title.trim()
+        // Skip empty while the user is still editing; commitTitle restores the
+        // default so a blank row never reaches the list.
         if (trimmed.isEmpty()) return
         viewModelScope.launch {
             repository.updateTitle(recordingId, trimmed)
+        }
+    }
+
+    fun commitTitle(title: String) {
+        if (isDeleted) return
+        val trimmed = title.trim()
+        viewModelScope.launch {
+            val resolved = if (trimmed.isEmpty()) {
+                val current = repository.get(recordingId) ?: return@launch
+                Formatters.recordingTitle(getApplication(), current.dateCreated)
+            } else {
+                trimmed
+            }
+            repository.updateTitle(recordingId, resolved)
         }
     }
 
@@ -134,14 +193,18 @@ class RecordingDetailViewModel(
                 val apps = uploadService.fetchApps()
                 _availableApps.value = apps
                 if (apps.none { it.id == _selectedAppId.value }) {
+                    // Fall back to the default app, or to the only app there is.
+                    // Otherwise leave the choice to the user rather than silently
+                    // picking the first one in the list.
                     _selectedAppId.value = apps.firstOrNull { it.id == settingsStore.appId }?.id
-                        ?: apps.firstOrNull()?.id
-                        ?: settingsStore.appId
+                        ?: if (apps.size == 1) apps[0].id else ""
                 }
                 apps.firstOrNull { it.id == settingsStore.appId }?.let { defaultApp ->
                     settingsStore.persistDefaultAppDisplayName(defaultApp.name, defaultApp.spaceName, defaultApp.id)
                 }
-                setSelectedApp(_selectedAppId.value)
+                if (_selectedAppId.value.isNotEmpty()) {
+                    setSelectedApp(_selectedAppId.value)
+                }
             } catch (error: Exception) {
                 val presentation = ErrorPresentation.from(getApplication(), error)
                 if (presentation.requiresSignIn) {
@@ -188,6 +251,10 @@ class RecordingDetailViewModel(
         _preflightError.value = null
     }
 
+    fun clearAppLoadError() {
+        _appLoadError.value = null
+    }
+
     fun dismissNotice() {
         _appLoadError.value = null
         _preflightError.value = null
@@ -221,6 +288,9 @@ class RecordingDetailViewModel(
     }
 
     fun selectedAppDisplayName(recording: RecordingEntity): String {
+        if (_selectedAppId.value.trim().isEmpty()) {
+            return getApplication<Application>().getString(se.iteca.eneotaltilltext.R.string.detail_select_app)
+        }
         _availableApps.value.firstOrNull { it.id == _selectedAppId.value }?.let { return it.displayName }
         val name = recording.uploadAppName?.trim().orEmpty()
         if (name.isNotEmpty()) {
@@ -233,6 +303,8 @@ class RecordingDetailViewModel(
         return getApplication<Application>().getString(se.iteca.eneotaltilltext.R.string.detail_default_app)
     }
 
+    fun hasSelectedApp(): Boolean = _selectedAppId.value.trim().isNotEmpty()
+
     fun uploadErrorPresentation(recording: RecordingEntity): ErrorPresentation? {
         val stored = recording.uploadError?.trim().orEmpty()
         if (stored.isEmpty()) return null
@@ -242,9 +314,10 @@ class RecordingDetailViewModel(
     fun upload() {
         if (uploadService.isUploading.value) return
         if (!settingsStore.hasAccessToken) return
+        val appId = _selectedAppId.value.trim().ifEmpty { settingsStore.appId }
+        if (appId.isEmpty()) return
         uploadService.markStarting(recordingId)
         viewModelScope.launch {
-            val appId = _selectedAppId.value.trim().ifEmpty { settingsStore.appId }
             repository.startUpload(
                 id = recordingId,
                 status = "processing",
@@ -268,6 +341,7 @@ class RecordingDetailViewModel(
     }
 
     fun delete(onDeleted: () -> Unit) {
+        isDeleted = true
         viewModelScope.launch {
             player.stop(resetPosition = true)
             val current = repository.get(recordingId) ?: return@launch

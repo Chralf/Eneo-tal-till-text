@@ -87,40 +87,56 @@ class RecordingFileStore(private val context: Context) {
         }
     }
 
+    /** Autosaved segment files for [finalFileName] that have not been merged yet. */
+    fun pendingPartFiles(finalFileName: String): List<File> {
+        val base = RecordingSegmentNaming.baseNameFromFinalFileName(finalFileName)
+        val files = recordingsDirectory.listFiles() ?: return emptyList()
+        val parts = files.filter { file ->
+            RecordingSegmentNaming.parsePart(file.name)?.first == base && file.length() > 1024
+        }
+        return RecordingSegmentNaming.groupPartFiles(parts)[base].orEmpty()
+    }
+
     /**
-     * Finds `_pNNN` segment groups, concatenates them into `{base}.m4a`, deletes parts.
-     * Returns recovered final files with duration and creation time.
-     * Truncated mid-kill parts are skipped; falls back to the best readable part.
+     * Merges leftover segments into `{base}.m4a` and deletes the parts only after success.
+     * A failed merge leaves every part in place for a later attempt.
+     */
+    fun mergePendingParts(finalFileName: String): RecoveredSegmentSession? {
+        val parts = pendingPartFiles(finalFileName)
+        if (parts.isEmpty()) return null
+        val finalFile = File(recordingsDirectory, finalFileName)
+        if (!M4aSegmentConcatenator.concatenate(parts, finalFile)) return null
+        deleteSessionPartFiles(finalFileName)
+        val duration = durationSeconds(finalFile)
+        val created = parts.minOfOrNull { it.lastModified() }?.takeIf { it > 0 }
+            ?: finalFile.lastModified().takeIf { it > 0 }
+            ?: System.currentTimeMillis()
+        return RecoveredSegmentSession(finalFile, duration, created)
+    }
+
+    /**
+     * Finds `_pNNN` segment groups, concatenates them into `{base}.m4a`, and deletes
+     * parts only when the merge succeeds.
+     *
+     * Leftover parts next to a complete final file mean the process was killed
+     * while deleting them after a successful merge. Merging again would overwrite
+     * the full recording with only the parts that survived, so just finish cleanup.
      */
     fun recoverSegmentSessions(): List<RecoveredSegmentSession> {
         val files = recordingsDirectory.listFiles()?.toList().orEmpty()
         val candidateParts = files.filter {
             RecordingSegmentNaming.isPartFileName(it.name) && it.length() > 1024
         }
-        val grouped = RecordingSegmentNaming.groupPartFiles(candidateParts)
-        val recovered = mutableListOf<RecoveredSegmentSession>()
-        for ((baseName, parts) in grouped) {
-            if (parts.isEmpty()) continue
-            val readable = parts.filter { M4aSegmentConcatenator.isReadableAudioPart(it) }
-            if (readable.isEmpty()) continue
-            val finalFile = RecordingSegmentNaming.finalFile(recordingsDirectory, baseName)
-            val ok = M4aSegmentConcatenator.concatenate(readable, finalFile) ||
-                M4aSegmentConcatenator.copyPartToOutput(readable.maxBy { it.length() }, finalFile)
-            if (!ok) continue
-            readable.forEach { part ->
-                if (part.absolutePath != finalFile.absolutePath) part.delete()
+        return RecordingSegmentNaming.groupPartFiles(candidateParts).mapNotNull { (baseName, _) ->
+            val finalFileName = RecordingSegmentNaming.finalFileName(baseName)
+            val finalFile = File(recordingsDirectory, finalFileName)
+            if (finalFile.exists() && finalFile.length() > 1024) {
+                deleteSessionPartFiles(finalFileName)
+                null
+            } else {
+                mergePendingParts(finalFileName)
             }
-            files.filter {
-                RecordingSegmentNaming.parsePart(it.name)?.first == baseName && it.exists()
-            }.forEach { it.delete() }
-
-            val duration = durationSeconds(finalFile)
-            val created = readable.minOfOrNull { it.lastModified() }?.takeIf { it > 0 }
-                ?: finalFile.lastModified().takeIf { it > 0 }
-                ?: System.currentTimeMillis()
-            recovered += RecoveredSegmentSession(finalFile, duration, created)
         }
-        return recovered
     }
 
     private fun looksLikeSupportedAudio(file: File): Boolean {

@@ -17,7 +17,7 @@ struct RecordingDetailView: View {
     @State private var isScrubbing = false
     @State private var playbackTimer: Timer?
     @State private var showDeleteConfirmation = false
-    @AppStorage("eneoAppID") private var defaultAppID = APISettings.defaultAppID
+    @AppStorage(APISettings.appIDStorageKey) private var defaultAppID = APISettings.defaultAppID
 
     @State private var selectedAppID = ""
     @State private var availableApps: [EneoApp] = []
@@ -27,6 +27,9 @@ struct RecordingDetailView: View {
     @State private var showConnectSheet = false
     @State private var pendingUploadAfterLogin = false
     @State private var pendingOpenAppPickerAfterLogin = false
+    /// Set when Convert was tapped with no app chosen; the upload starts as
+    /// soon as the picker returns a choice.
+    @State private var pendingUploadAfterAppPick = false
     @State private var showAppPicker = false
     @State private var isCheckingServer = false
     @State private var isInfoExpanded = false
@@ -259,8 +262,8 @@ struct RecordingDetailView: View {
                     togglePlayback()
                 } label: {
                     Label(
-                        isPlaying ? "Stoppa" : "Spela upp",
-                        systemImage: isPlaying ? "stop.fill" : "play.fill"
+                        isPlaying ? "Pausa" : "Spela upp",
+                        systemImage: isPlaying ? "pause.fill" : "play.fill"
                     )
                 }
                 .disabled(!recording.audioFileExists)
@@ -337,6 +340,10 @@ struct RecordingDetailView: View {
         .background(.bar)
     }
 
+    private var hasSelectedApp: Bool {
+        !normalizedSelectedAppID().isEmpty
+    }
+
     @ViewBuilder
     private var appSelectionSection: some View {
         Section {
@@ -345,7 +352,7 @@ struct RecordingDetailView: View {
             } label: {
                 HStack(alignment: .center, spacing: 12) {
                     Text(selectedAppDisplayName)
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(hasSelectedApp ? AnyShapeStyle(.primary) : AnyShapeStyle(.tint))
                         .multilineTextAlignment(.leading)
                         .lineLimit(3)
                         .fixedSize(horizontal: false, vertical: true)
@@ -362,10 +369,17 @@ struct RecordingDetailView: View {
                 }
             }
             .accessibilityHint("Välj Eneo-app. Kräver nätverk och inloggning.")
+        } footer: {
+            if !hasSelectedApp {
+                Text("Välj vilken Eneo-app som ska omvandla inspelningen. Du kan också välja en förvald app under Inställningar.")
+            }
         }
     }
 
     private var selectedAppDisplayName: String {
+        if !hasSelectedApp {
+            return String(localized: "Välj Eneo-app", comment: "Visas i appraden när ingen Eneo-app är vald")
+        }
         if let app = availableApps.first(where: { $0.id == selectedAppID }) {
             return app.displayName
         }
@@ -387,6 +401,10 @@ struct RecordingDetailView: View {
             set: { newValue in
                 selectedAppID = newValue
                 saveSelectedApp()
+                if pendingUploadAfterAppPick, !newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    pendingUploadAfterAppPick = false
+                    uploadRecording()
+                }
             }
         )
     }
@@ -611,12 +629,23 @@ struct RecordingDetailView: View {
                 let apps = try await uploadService.fetchApps()
                 availableApps = apps
                 if !apps.contains(where: { $0.id == selectedAppID }) {
-                    selectedAppID = apps.first(where: { $0.id == defaultAppID })?.id ?? apps.first?.id ?? defaultAppID
+                    // Fall back to the default app, or to the only app there
+                    // is. Otherwise leave the choice to the user rather than
+                    // silently picking the first one in the list.
+                    selectedAppID = apps.first(where: { $0.id == defaultAppID })?.id
+                        ?? (apps.count == 1 ? apps[0].id : "")
                 }
                 if let defaultApp = apps.first(where: { $0.id == defaultAppID }) {
                     APISettings.persistDefaultAppDisplayName(from: defaultApp)
                 }
                 saveSelectedApp()
+                if pendingUploadAfterAppPick, hasSelectedApp {
+                    // The only available app was taken automatically; no need
+                    // to make the user confirm it in the picker.
+                    pendingUploadAfterAppPick = false
+                    showAppPicker = false
+                    uploadRecording()
+                }
             } catch {
                 let presentation = ErrorPresentation(error)
                 if presentation.requiresSignIn {
@@ -657,6 +686,14 @@ struct RecordingDetailView: View {
 
             guard authService.isAuthenticated else {
                 beginLogin(thenUpload: true, thenOpenApps: false)
+                return
+            }
+
+            guard hasSelectedApp else {
+                // Nothing to convert with yet: let the user pick an app and
+                // continue the upload from there.
+                pendingUploadAfterAppPick = true
+                openAppPickerAfterAuth()
                 return
             }
 
@@ -728,6 +765,7 @@ struct RecordingDetailView: View {
 
     private func beginSelectApp() {
         guard !isCheckingServer else { return }
+        pendingUploadAfterAppPick = false
         Task {
             guard await ensureServerReachable(reportToAppSelection: true) else { return }
             if authService.isAuthenticated {

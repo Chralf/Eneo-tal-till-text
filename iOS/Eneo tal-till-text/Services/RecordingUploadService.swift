@@ -6,11 +6,21 @@ import UIKit
 
 struct APISettings {
     static let baseURLStorageKey = "eneoBaseURLString"
-    static let defaultAppID = "3412dabc-7343-49bb-b3bc-9f99204d10b2"
+    static let appIDStorageKey = "eneoAppID"
+    /// No app is chosen until the user picks one; every Eneo installation has
+    /// its own app IDs, so a built-in default would only fit one organisation.
+    static let defaultAppID = ""
     static let defaultAppNameStorageKey = "eneoAppName"
     static let defaultAppSpaceNameStorageKey = "eneoAppSpaceName"
-    /// A fresh install is usable without visiting Settings first.
-    static let defaultBaseURLString = "https://eneo.kommun.se"
+    /// No server is assumed either; onboarding asks for it.
+    static let defaultBaseURLString = ""
+
+    /// The chosen default app, or nil when the user has not picked one yet.
+    static var storedDefaultAppID: String? {
+        let value = (UserDefaults.standard.string(forKey: appIDStorageKey) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? nil : value
+    }
 
     let baseURL: URL
     let appID: String
@@ -19,9 +29,7 @@ struct APISettings {
     static func load() throws -> APISettings {
         let baseURL = try loadBaseURL()
 
-        let appID = (UserDefaults.standard.string(forKey: "eneoAppID") ?? defaultAppID)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !appID.isEmpty else {
+        guard let appID = storedDefaultAppID else {
             throw RecordingUploadError.missingAppID
         }
 
@@ -34,12 +42,12 @@ struct APISettings {
     }
 
     static func loadBaseURL() throws -> URL {
-        let storedValue = UserDefaults.standard.string(forKey: baseURLStorageKey) ?? ""
-        let baseURLString = storedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            ? defaultBaseURLString
-            : storedValue
-        let normalizedBaseURLString = normalizedBaseURLString(baseURLString)
-        guard let baseURL = makeBaseURL(from: normalizedBaseURLString) else {
+        let storedValue = (UserDefaults.standard.string(forKey: baseURLStorageKey) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !storedValue.isEmpty else {
+            throw RecordingUploadError.missingServerURL
+        }
+        guard let baseURL = makeBaseURL(from: storedValue) else {
             throw RecordingUploadError.missingAPISettings
         }
 
@@ -85,9 +93,7 @@ struct APISettings {
     }
 
     static func persistDefaultAppDisplayName(from app: EneoApp) {
-        let currentID = (UserDefaults.standard.string(forKey: "eneoAppID") ?? defaultAppID)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard app.id == currentID else { return }
+        guard app.id == storedDefaultAppID else { return }
         UserDefaults.standard.set(app.name, forKey: defaultAppNameStorageKey)
         UserDefaults.standard.set(app.spaceName, forKey: defaultAppSpaceNameStorageKey)
     }
@@ -913,6 +919,7 @@ private struct RunResult {
 }
 
 enum RecordingUploadError: PresentableError {
+    case missingServerURL
     case missingAPISettings
     case missingAppID
     case missingAccessToken
@@ -928,6 +935,8 @@ enum RecordingUploadError: PresentableError {
 
     var errorDescription: String? {
         switch self {
+        case .missingServerURL:
+            return String(localized: "Ingen serveradress är angiven", comment: "Rubrik när Eneo-adressen saknas helt")
         case .missingAPISettings:
             return String(localized: "Serveradressen är ogiltig", comment: "Rubrik när Eneo-adressen inte går att tolka")
         case .missingAppID:
@@ -955,6 +964,8 @@ enum RecordingUploadError: PresentableError {
 
     var recoverySuggestion: String? {
         switch self {
+        case .missingServerURL:
+            return String(localized: "Ange adressen till din organisations Eneo under Inställningar.", comment: "Åtgärd när serveradress saknas")
         case .missingAPISettings:
             return String(localized: "Kontrollera serveradressen under Inställningar.", comment: "Åtgärd vid ogiltig adress")
         case .missingAppID:
@@ -996,7 +1007,7 @@ enum RecordingUploadError: PresentableError {
             return "waveform.slash"
         case .runTimedOut:
             return "clock.badge.exclamationmark"
-        case .missingAPISettings, .noSpacesFound, .noAppsFound, .missingAppID:
+        case .missingServerURL, .missingAPISettings, .noSpacesFound, .noAppsFound, .missingAppID:
             return "gearshape.exclamationmark"
         default:
             return "exclamationmark.triangle.fill"
