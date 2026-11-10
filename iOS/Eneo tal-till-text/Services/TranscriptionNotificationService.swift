@@ -1,6 +1,25 @@
 import Foundation
 import UserNotifications
 
+/// Lets a result notification show as a banner while the app is in the
+/// foreground too. Without a delegate iOS silently drops it, so a user who
+/// moved on to another recording would never learn the first one finished.
+final class TranscriptionNotificationPresenter: NSObject, UNUserNotificationCenterDelegate {
+    static let shared = TranscriptionNotificationPresenter()
+
+    func install() {
+        UNUserNotificationCenter.current().delegate = self
+    }
+
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .sound])
+    }
+}
+
 struct TranscriptionNotificationService {
     static func requestAuthorizationIfNeeded() async {
         let center = UNUserNotificationCenter.current()

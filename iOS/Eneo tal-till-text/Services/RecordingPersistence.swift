@@ -16,8 +16,11 @@ enum RecordingPersistence {
         }
     }
 
+    /// Applies the retention setting. Also run when the app returns to the
+    /// foreground: iOS keeps the process alive for days, so launch alone would
+    /// let expired audio linger far past the configured limit.
     @MainActor
-    private static func purgeExpiredRecordings(context: ModelContext) {
+    static func purgeExpiredRecordings(context: ModelContext) {
         guard let recordings = try? context.fetch(FetchDescriptor<Recording>()) else { return }
         let now = Date()
         for recording in recordings {
@@ -35,6 +38,7 @@ enum RecordingPersistence {
             deleteSessionPartFiles(forFinalFileName: recording.audioFileName)
             context.delete(recording)
         }
+        try? context.save()
     }
 
     @MainActor
@@ -134,18 +138,18 @@ enum RecordingPersistence {
         for (baseName, parts) in grouped {
             guard !parts.isEmpty else { continue }
             let finalURL = RecordingSegmentNaming.finalURL(directory: directory, baseName: baseName)
-            let ok = await M4aSegmentConcatenator.concatenate(parts: parts, output: finalURL)
-            guard ok else { continue }
 
-            for part in parts where part.standardizedFileURL != finalURL.standardizedFileURL {
-                try? fm.removeItem(at: part)
+            // Leftover parts next to a complete final file mean the app was
+            // killed while deleting them after a successful merge. Merging
+            // again would overwrite the full recording with only the parts
+            // that survived, so just finish the cleanup instead.
+            let finalSize = (try? finalURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+            if finalSize > 1024 {
+                deleteSessionPartFiles(forFinalFileName: finalURL.lastPathComponent)
+                continue
             }
-            for file in files {
-                if RecordingSegmentNaming.parsePart(file.lastPathComponent)?.base == baseName,
-                   fm.fileExists(atPath: file.path) {
-                    try? fm.removeItem(at: file)
-                }
-            }
+
+            guard await mergeParts(parts, into: finalURL) else { continue }
 
             let finalName = finalURL.lastPathComponent
             let existing = (try? context.fetch(FetchDescriptor<Recording>()))?
@@ -174,6 +178,42 @@ enum RecordingPersistence {
                 updateDuration(for: recording, fileURL: finalURL, context: context)
             }
         }
+    }
+
+    /// Autosaved segment files that belong to this recording but have not yet
+    /// been merged into its final audio file.
+    static func pendingPartFiles(for recording: Recording) -> [URL] {
+        let base = RecordingSegmentNaming.baseName(fromFinalFileName: recording.audioFileName)
+        guard let files = try? FileManager.default.contentsOfDirectory(
+            at: Recording.recordingsDirectory,
+            includingPropertiesForKeys: [.fileSizeKey],
+            options: [.skipsHiddenFiles]
+        ) else { return [] }
+        let parts = files.filter { url in
+            guard RecordingSegmentNaming.parsePart(url.lastPathComponent)?.base == base else { return false }
+            let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+            return size > 1024
+        }
+        return RecordingSegmentNaming.groupPartFiles(parts)[base] ?? []
+    }
+
+    /// Retries merging leftover segments when a recording's final file is
+    /// missing, e.g. because the merge after stopping was interrupted.
+    static func recoverAudioFile(for recording: Recording, context: ModelContext) async -> Bool {
+        guard !recording.audioFileExists else { return true }
+        let parts = pendingPartFiles(for: recording)
+        guard !parts.isEmpty else { return false }
+
+        guard await mergeParts(parts, into: recording.audioFileURL) else { return false }
+
+        updateDuration(for: recording, fileURL: recording.audioFileURL, context: context)
+        return true
+    }
+
+    private static func mergeParts(_ parts: [URL], into finalURL: URL) async -> Bool {
+        guard await M4aSegmentConcatenator.concatenate(parts: parts, output: finalURL) else { return false }
+        deleteSessionPartFiles(forFinalFileName: finalURL.lastPathComponent)
+        return true
     }
 
     static func deleteSessionPartFiles(forFinalFileName fileName: String) {

@@ -1,5 +1,8 @@
 import Foundation
 import Observation
+#if canImport(UIKit)
+import UIKit
+#endif
 
 struct APISettings {
     static let baseURLStorageKey = "eneoBaseURLString"
@@ -148,11 +151,41 @@ final class RecordingUploadService {
     func performUpload(recordingID: UUID, operation: @escaping @MainActor () async -> Void) {
         inFlightUpload?.cancel()
         uploadingRecordingID = recordingID
-        inFlightUpload = Task { @MainActor in
+        // Busy from the first moment so a second tap cannot start a parallel
+        // upload while e.g. the notification permission prompt is showing.
+        isUploading = true
+
+        // Without this the upload and the polling loop are suspended the
+        // moment the user locks the phone. The extra time (about 30 s) lets
+        // short conversions finish and post their notification; longer ones
+        // simply resume when the app is next in the foreground.
+        #if canImport(UIKit)
+        var backgroundTask: UIBackgroundTaskIdentifier = .invalid
+        backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "UploadRecording") {
+            UIApplication.shared.endBackgroundTask(backgroundTask)
+            backgroundTask = .invalid
+        }
+        #endif
+
+        let task = Task { @MainActor in
             await operation()
-            if inFlightUpload?.isCancelled == false {
-                inFlightUpload = nil
+        }
+        inFlightUpload = task
+        Task { @MainActor in
+            await task.value
+            #if canImport(UIKit)
+            if backgroundTask != .invalid {
+                UIApplication.shared.endBackgroundTask(backgroundTask)
+                backgroundTask = .invalid
             }
+            #endif
+            // Only the task that is still current may clear the shared state;
+            // a superseded task must not drop the reference to its successor.
+            guard inFlightUpload == task else { return }
+            inFlightUpload = nil
+            isUploading = false
+            statusText = nil
+            uploadingRecordingID = nil
         }
     }
 
@@ -173,6 +206,9 @@ final class RecordingUploadService {
         configuration.timeoutIntervalForResource = 12
         configuration.waitsForConnectivity = false
         let session = URLSession(configuration: configuration)
+        // A session is never released until invalidated; without this every
+        // probe would leak one.
+        defer { session.finishTasksAndInvalidate() }
         var request = URLRequest(url: baseURL)
         request.httpMethod = "GET"
         request.timeoutInterval = 12
@@ -336,6 +372,7 @@ final class RecordingUploadService {
         var runID = recording.uploadServerID?.trimmingCharacters(in: .whitespacesAndNewlines)
         if runID?.isEmpty != false { runID = nil }
 
+        let isResumingRun = runID != nil
         if runID == nil {
             if fileID == nil {
                 fileID = try await uploadAudioFile(recording, settings: settings)
@@ -357,6 +394,16 @@ final class RecordingUploadService {
                 fileID = try await uploadAudioFile(recording, settings: settings)
                 await onCheckpoint?(fileID, nil)
             }
+            runID = try await startRun(fileID: fileID!, settings: settings)
+            await onCheckpoint?(fileID, runID)
+            completedRun = try await pollRun(runID: runID!, settings: settings)
+        } catch RecordingUploadError.runFailed where isResumingRun {
+            // A saved run that already failed on the server will never succeed,
+            // so resuming it would fail on every retry. Upload the file again
+            // and start a fresh run instead.
+            statusText = String(localized: "Laddar upp ljud...", comment: "Status medan ljudfilen skickas")
+            fileID = try await uploadAudioFile(recording, settings: settings)
+            await onCheckpoint?(fileID, nil)
             runID = try await startRun(fileID: fileID!, settings: settings)
             await onCheckpoint?(fileID, runID)
             completedRun = try await pollRun(runID: runID!, settings: settings)
@@ -476,7 +523,7 @@ final class RecordingUploadService {
         switch status {
         case "queued", "pending", "created":
             return Self.transcribingStatus
-        case "running", "processing", "in_progress", "started":
+        case "running", "processing", "in_progress", "in progress", "started":
             return String(localized: "Sammanfattar med AI...", comment: "Status medan Eneo sammanfattar texten")
         case "complete", "completed", "success", "succeeded", "done", "finished":
             return Self.downloadingStatus
@@ -928,7 +975,9 @@ enum RecordingUploadError: PresentableError {
             if let message, !message.isEmpty, message != "<null>" {
                 return message
             }
-            return String(localized: "Eneo angav ingen orsak. Försök igen.", comment: "Åtgärd när körningen misslyckades utan orsak")
+            // Eneo reports e.g. an unsupported transcription model only as a
+            // bare "failed" status, so point the user at the app's settings.
+            return String(localized: "Eneo angav ingen orsak. Det beror ofta på att den valda Eneo-appen använder en transkriberingsmodell som inte stöds. Kontrollera appens modellinställningar i Eneo och försök igen.", comment: "Åtgärd när körningen misslyckades utan orsak")
         case .runTimedOut:
             return String(localized: "Ljudfilen kan vara för lång. Försök igen eller dela upp inspelningen.", comment: "Åtgärd vid timeout")
         case .serverError(_, _, _, _, _, let message):

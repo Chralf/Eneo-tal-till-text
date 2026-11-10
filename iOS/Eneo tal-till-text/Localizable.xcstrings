@@ -43,9 +43,6 @@
     "Appen behöver åtkomst till mikrofonen för att spela in ljud. Aktivera mikrofonåtkomst i Inställningar." : {
 
     },
-    "Appen fick inte tillgång till filen. Försök dela den på nytt." : {
-      "comment" : "Åtgärd när importerad fil nekas"
-    },
     "Appen kunde inte starta." : {
       "comment" : "Allmänt startfel"
     },
@@ -63,6 +60,9 @@
     },
     "Återställd %@" : {
       "comment" : "Titel på inspelning som återfunnits vid start. Platshållaren är datum och tid."
+    },
+    "Återställer ljudfilen…" : {
+      "comment" : "Visas medan sparade ljuddelar slås ihop till en fil"
     },
     "Återuppta inspelning" : {
 
@@ -121,7 +121,7 @@
     "Eneo" : {
 
     },
-    "Eneo angav ingen orsak. Försök igen." : {
+    "Eneo angav ingen orsak. Det beror ofta på att den valda Eneo-appen använder en transkriberingsmodell som inte stöds. Kontrollera appens modellinställningar i Eneo och försök igen." : {
       "comment" : "Åtgärd när körningen misslyckades utan orsak"
     },
     "Eneo kunde inte logga in dig" : {
@@ -157,14 +157,14 @@
     "Filen kunde inte importeras" : {
       "comment" : "Rubrik när importen misslyckades"
     },
-    "Filen kunde inte öppnas" : {
-      "comment" : "Rubrik när importerad fil nekas"
-    },
     "Filen ser inte ut att vara ett stött ljudformat. Du kan importera m4a, wav, mp3, caf, aac och flac." : {
       "comment" : "Magic-byte-validering misslyckades"
     },
     "Filformatet stöds inte" : {
       "comment" : "Rubrik vid okänt filformat"
+    },
+    "Försök igen" : {
+      "comment" : "Knapp för att försöka återställa ljudfilen igen\nKnapp i felsektionen för att omvandla på nytt"
     },
     "Försök igen om en stund." : {
       "comment" : "Åtgärd vid serverfel utan meddelande"
@@ -358,6 +358,9 @@
     "Ljudet du har spelat in raderas och går inte att få tillbaka." : {
 
     },
+    "Ljudet finns sparat i delar på telefonen men kunde inte slås ihop. Lås upp telefonen, håll appen öppen och försök igen." : {
+      "comment" : "Förklaring när sparade ljuddelar inte kunde slås ihop"
+    },
     "Ljudfilen är importerad" : {
       "comment" : "Rubrik när importen lyckades"
     },
@@ -384,6 +387,9 @@
     },
     "Logga in i Eneo igen för att skicka inspelningen." : {
       "comment" : "Åtgärd vid utgången inloggning"
+    },
+    "Logga in igen" : {
+      "comment" : "Knapp i felsektionen när inloggningen gått ut"
     },
     "Logga in med det konto du använder hos din organisation." : {
 
@@ -499,6 +505,9 @@
     "Sök" : {
 
     },
+    "Sparar inspelningen..." : {
+
+    },
     "Spela in" : {
 
     },
@@ -537,6 +546,9 @@
 
     },
     "Stoppa och spara inspelning" : {
+
+    },
+    "Teknisk information" : {
 
     },
     "Testa kommunikation till Eneo" : {

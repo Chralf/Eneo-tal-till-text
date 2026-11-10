@@ -7,6 +7,7 @@ struct RecordView: View {
     @Environment(AudioRecorderService.self) private var recorder
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
 
     @State private var permissionGranted = false
     @State private var showPermissionAlert = false
@@ -56,10 +57,14 @@ struct RecordView: View {
 
                 Spacer()
 
-                controlButtons
+                if recorder.isFinalizing {
+                    finalizingLabel
+                } else {
+                    controlButtons
+                }
 
                 ZStack {
-                    if recorder.state == .idle {
+                    if recorder.state == .idle && !recorder.isFinalizing {
                         idleTips
                             .transition(.asymmetric(
                                 insertion: .opacity.combined(with: .move(edge: .bottom)),
@@ -67,7 +72,7 @@ struct RecordView: View {
                             ))
                     }
                 }
-                .animation(.easeInOut(duration: 0.28), value: recorder.state == .idle)
+                .animation(.easeInOut(duration: 0.28), value: recorder.state == .idle && !recorder.isFinalizing)
                 .frame(maxWidth: .infinity)
                 .padding(.bottom, 8)
 
@@ -83,14 +88,14 @@ struct RecordView: View {
                         Button("Avbryt") {
                             showDiscardConfirmation = true
                         }
-                    } else {
+                    } else if !recorder.isFinalizing {
                         Button("Stäng") {
                             dismiss()
                         }
                     }
                 }
             }
-            .interactiveDismissDisabled(recorder.state != .idle)
+            .interactiveDismissDisabled(recorder.state != .idle || recorder.isFinalizing)
             .confirmationDialog("Kasta inspelningen?", isPresented: $showDiscardConfirmation, titleVisibility: .visible) {
                 Button("Kasta inspelningen", role: .destructive) {
                     cancelActiveRecording()
@@ -104,6 +109,12 @@ struct RecordView: View {
                 if !permissionGranted {
                     showPermissionAlert = true
                 }
+            }
+            .onChange(of: scenePhase) { _, phase in
+                // The user may have enabled microphone access in Settings and
+                // come straight back; the record button must follow suit.
+                guard phase == .active, !permissionGranted else { return }
+                permissionGranted = recorder.hasRecordPermission
             }
             .onChange(of: recorder.reachedMaxDuration) { _, reached in
                 if reached {
@@ -183,6 +194,19 @@ struct RecordView: View {
             .accessibilityElement(children: .combine)
         }
         .padding(.horizontal, 32)
+    }
+
+    /// Shown while autosaved segments are merged into the final file. The
+    /// controls are hidden so a new session cannot start on top of the merge.
+    private var finalizingLabel: some View {
+        HStack(spacing: 12) {
+            ProgressView()
+            Text("Sparar inspelningen...")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .frame(height: 72)
+        .accessibilityElement(children: .combine)
     }
 
     @ViewBuilder
@@ -327,6 +351,8 @@ struct RecordView: View {
     }
 
     private func finalizeRecording(fromMaxDuration: Bool) {
+        // A second tap on stop while the merge is running must not finalize twice.
+        guard fromMaxDuration || !recorder.isFinalizing else { return }
         Task { @MainActor in
             let duration: TimeInterval
             if fromMaxDuration && recorder.state == .idle {

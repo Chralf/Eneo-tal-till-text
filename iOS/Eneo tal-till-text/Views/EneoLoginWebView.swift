@@ -13,7 +13,10 @@ struct EneoLoginWebView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
-        configuration.websiteDataStore = .default()
+        // Cookies from the identity provider must not outlive the sign-in.
+        // With a persistent store, "Logga ut" would still leave the next login
+        // to pass straight through on the remembered IdP session.
+        configuration.websiteDataStore = .nonPersistent()
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = context.coordinator

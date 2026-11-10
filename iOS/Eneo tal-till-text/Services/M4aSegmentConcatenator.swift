@@ -1,5 +1,8 @@
 import Foundation
 import AVFoundation
+#if os(iOS)
+import UIKit
+#endif
 
 enum RecordingSegmentNaming {
     private static let partPattern = try! NSRegularExpression(pattern: #"^(.+)_p(\d{3})\.m4a$"#, options: [.caseInsensitive])
@@ -53,7 +56,32 @@ enum RecordingSegmentNaming {
 }
 
 enum M4aSegmentConcatenator {
+    /// Output paths currently being written, so launch recovery and the detail
+    /// view never merge the same session concurrently.
+    private static var inFlightOutputs: Set<String> = []
+
     static func concatenate(parts: [URL], output: URL) async -> Bool {
+        let key = output.standardizedFileURL.path
+        guard !inFlightOutputs.contains(key) else { return false }
+        inFlightOutputs.insert(key)
+        defer { inFlightOutputs.remove(key) }
+
+        // The audio session is deactivated before merging, so without extra
+        // background time the export is suspended if the user locks the phone
+        // or leaves the app right after tapping stop.
+        #if os(iOS)
+        let backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "MergeRecordingSegments")
+        defer {
+            if backgroundTask != .invalid {
+                UIApplication.shared.endBackgroundTask(backgroundTask)
+            }
+        }
+        #endif
+
+        return await merge(parts: parts, output: output)
+    }
+
+    private static func merge(parts: [URL], output: URL) async -> Bool {
         let playable = parts.filter { url in
             let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
             return size > 1024
@@ -101,9 +129,18 @@ enum M4aSegmentConcatenator {
             }
         }
 
-        // Never publish a partial final file as if all autosaved segments had
-        // been preserved. The caller will keep the parts for recovery.
-        guard insertAt.seconds > 0, !skippedPart else { return false }
+        guard insertAt.seconds > 0 else { return false }
+
+        // A skipped part is either corrupt (e.g. cut off by a phone call) or
+        // temporarily unreadable because the device is locked. Only in the
+        // first case is it right to publish what we have; otherwise one bad
+        // part would block the whole recording forever. When locked, fail so
+        // the caller keeps every part for a later retry.
+        if skippedPart {
+            #if os(iOS)
+            guard UIApplication.shared.isProtectedDataAvailable else { return false }
+            #endif
+        }
 
         let temp = output.deletingLastPathComponent()
             .appendingPathComponent("\(output.deletingPathExtension().lastPathComponent)_concat_tmp.m4a")

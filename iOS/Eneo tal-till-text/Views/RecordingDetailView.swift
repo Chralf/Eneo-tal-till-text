@@ -32,6 +32,20 @@ struct RecordingDetailView: View {
     @State private var isInfoExpanded = false
     @State private var isPlaybackExpanded = false
     @State private var didCopyResult = false
+    @State private var isRecoveringAudio = false
+    @State private var audioRecoveryFailed = false
+    @State private var isDeleted = false
+    /// Plain-text version of the result for sharing. Cached because deriving
+    /// it parses the whole markdown document, and the body is re-evaluated
+    /// several times a second during playback.
+    @State private var sharePlainText = ""
+    /// Failure from an upload in this session, with symbol and sign-in hint.
+    /// Persisted text takes over after a relaunch.
+    @State private var activeUploadError: ErrorPresentation?
+
+    private var displayedUploadError: ErrorPresentation? {
+        activeUploadError ?? persistedUploadError
+    }
 
     private var uploadButtonTitle: LocalizedStringKey {
         recording.hasTranscription ? "Omvandla igen" : "Omvandla till text"
@@ -59,6 +73,7 @@ struct RecordingDetailView: View {
             missingFileSection
             playerSection
             appSelectionSection
+            uploadErrorSection
             resultSection
             deleteSection
         }
@@ -81,9 +96,13 @@ struct RecordingDetailView: View {
         .onAppear {
             loadPlaybackDuration()
             prepareAppSelection()
-            if noticeAlert == nil, let persistedUploadError {
-                presentNotice(persistedUploadError)
-            }
+        }
+        .task {
+            await recoverMissingAudioIfPossible()
+        }
+        .task(id: recording.transcriptionText) {
+            let text = recording.transcriptionText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            sharePlainText = text.isEmpty ? "" : MarkdownExport.from(markdown: text).plain
         }
         .onChange(of: authService.isAuthenticated) { _, isAuthenticated in
             if !isAuthenticated {
@@ -93,7 +112,9 @@ struct RecordingDetailView: View {
             }
         }
         .onDisappear {
-            saveCurrentTitle()
+            if !isDeleted {
+                saveCurrentTitle()
+            }
             stopPlayback()
         }
         .alert(item: $noticeAlert) { alert in
@@ -154,13 +175,21 @@ struct RecordingDetailView: View {
 
     @ViewBuilder
     private var missingFileSection: some View {
-        if !recording.audioFileExists {
+        if isRecoveringAudio {
+            Section {
+                Label {
+                    Text(String(localized: "Återställer ljudfilen…", comment: "Visas medan sparade ljuddelar slås ihop till en fil"))
+                } icon: {
+                    ProgressView()
+                }
+            }
+        } else if !recording.audioFileExists {
             Section {
                 Label {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(String(localized: "Ljudfilen saknas", comment: "Rubrik när ljudfilen inte finns på enheten"))
                             .font(.headline)
-                        Text(String(localized: "Filen kan ha raderats utanför appen. Du kan inte spela upp eller omvandla den här inspelningen.", comment: "Förklaring när ljudfilen saknas"))
+                        Text(missingFileMessage)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -169,7 +198,37 @@ struct RecordingDetailView: View {
                     Image(systemName: "waveform.slash")
                         .foregroundStyle(.secondary)
                 }
+
+                if audioRecoveryFailed {
+                    Button(String(localized: "Försök igen", comment: "Knapp för att försöka återställa ljudfilen igen")) {
+                        Task { await recoverMissingAudioIfPossible() }
+                    }
+                }
             }
+        }
+    }
+
+    private var missingFileMessage: String {
+        if audioRecoveryFailed {
+            return String(localized: "Ljudet finns sparat i delar på telefonen men kunde inte slås ihop. Lås upp telefonen, håll appen öppen och försök igen.", comment: "Förklaring när sparade ljuddelar inte kunde slås ihop")
+        }
+        return String(localized: "Filen kan ha raderats utanför appen. Du kan inte spela upp eller omvandla den här inspelningen.", comment: "Förklaring när ljudfilen saknas")
+    }
+
+    /// Merges leftover autosaved segments when the final file was never written,
+    /// e.g. because the app was suspended while merging after stop.
+    private func recoverMissingAudioIfPossible() async {
+        guard !isRecoveringAudio,
+              !recording.audioFileExists,
+              !RecordingPersistence.pendingPartFiles(for: recording).isEmpty
+        else { return }
+
+        isRecoveringAudio = true
+        let recovered = await RecordingPersistence.recoverAudioFile(for: recording, context: modelContext)
+        isRecoveringAudio = false
+        audioRecoveryFailed = !recovered
+        if recovered {
+            loadPlaybackDuration()
         }
     }
 
@@ -350,10 +409,46 @@ struct RecordingDetailView: View {
         }
     }
 
+    /// A failed conversion stays visible, with its remedy, until the next
+    /// attempt starts. An alert would vanish and take the explanation with it.
+    @ViewBuilder
+    private var uploadErrorSection: some View {
+        if let error = displayedUploadError, !uploadService.isUploading(recording) {
+            Section {
+                ErrorNotice(
+                    presentation: error,
+                    actionTitle: error.requiresSignIn
+                        ? LocalizedStringResource("Logga in igen", comment: "Knapp i felsektionen när inloggningen gått ut")
+                        : LocalizedStringResource("Försök igen", comment: "Knapp i felsektionen för att omvandla på nytt"),
+                    action: {
+                        if error.requiresSignIn {
+                            beginLogin(thenUpload: true, thenOpenApps: false)
+                        } else {
+                            uploadRecording()
+                        }
+                    }
+                )
+
+                if let details = error.technicalDetails, !details.isEmpty {
+                    DisclosureGroup {
+                        Text(details)
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    } label: {
+                        Text("Teknisk information")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+    }
+
     @ViewBuilder
     private var resultSection: some View {
         if let resultText = recording.transcriptionText?.trimmingCharacters(in: .whitespacesAndNewlines), !resultText.isEmpty {
-            let export = MarkdownExport.from(markdown: resultText)
             Section {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack(alignment: .firstTextBaseline) {
@@ -370,7 +465,7 @@ struct RecordingDetailView: View {
                         }
                         .buttonStyle(.borderless)
                         .accessibilityLabel("Kopiera resultat")
-                        ShareLink(item: export.plain, subject: Text(recording.title)) {
+                        ShareLink(item: sharePlainText.isEmpty ? resultText : sharePlainText, subject: Text(recording.title)) {
                             Image(systemName: "square.and.arrow.up")
                                 .imageScale(.large)
                                 .frame(minWidth: 44, minHeight: 44)
@@ -380,6 +475,7 @@ struct RecordingDetailView: View {
                     }
 
                     MarkdownResultView(markdown: resultText)
+                        .equatable()
                 }
             }
             .sensoryFeedback(.success, trigger: didCopyResult)
@@ -479,8 +575,17 @@ struct RecordingDetailView: View {
 
     private func saveCurrentTitle() {
         let trimmedTitle = recording.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedTitle.isEmpty else { return }
-        recording.title = trimmedTitle
+        if trimmedTitle.isEmpty {
+            // SwiftData autosaves the bound field, so an emptied title would
+            // otherwise persist and leave a blank row in the list.
+            let timestamp = recording.dateCreated.formatted(date: .numeric, time: .shortened)
+            recording.title = String(
+                localized: "Inspelning \(timestamp)",
+                comment: "Förvald titel på en ny inspelning. Platshållaren är datum och tid."
+            )
+        } else {
+            recording.title = trimmedTitle
+        }
         try? modelContext.save()
     }
 
@@ -579,7 +684,7 @@ struct RecordingDetailView: View {
             recording.uploadServerID = nil
         }
         clearNotice()
-        recording.uploadError = nil
+        clearUploadError()
         recording.uploadStatus = "processing"
         recording.uploadProgressText = String(localized: "Laddar upp ljud...", comment: "Status medan ljudfilen skickas")
         try? modelContext.save()
@@ -649,6 +754,7 @@ struct RecordingDetailView: View {
         } catch {
             presentNotice(ErrorPresentation(error))
             if !reportToAppSelection {
+                activeUploadError = nil
                 recording.uploadError = nil
                 recording.uploadStatus = nil
                 recording.uploadProgressText = nil
@@ -677,7 +783,7 @@ struct RecordingDetailView: View {
             authService.handleExpiredSession()
         }
 
-        presentNotice(presentation)
+        activeUploadError = presentation
         recording.uploadStatus = "failed"
         recording.uploadProgressText = nil
         recording.uploadError = [presentation.title, presentation.message]
@@ -699,7 +805,7 @@ struct RecordingDetailView: View {
         pendingUploadAfterLogin = thenUpload
         pendingOpenAppPickerAfterLogin = thenOpenApps
         clearNotice()
-        recording.uploadError = nil
+        clearUploadError()
         recording.uploadStatus = nil
         recording.uploadProgressText = nil
         try? modelContext.save()
@@ -711,8 +817,14 @@ struct RecordingDetailView: View {
         noticeAlert = NoticeAlert(presentation)
     }
 
+    /// Dismisses a transient alert only. The upload error is cleared
+    /// separately, when a new attempt begins.
     private func clearNotice() {
         noticeAlert = nil
+    }
+
+    private func clearUploadError() {
+        activeUploadError = nil
         recording.uploadError = nil
         try? modelContext.save()
     }
@@ -734,7 +846,8 @@ struct RecordingDetailView: View {
 
 
     private func deleteRecording() {
-        audioPlayer?.stop()
+        stopPlayback()
+        isDeleted = true
         try? FileManager.default.removeItem(at: recording.audioFileURL)
         RecordingPersistence.deleteSessionPartFiles(forFinalFileName: recording.audioFileName)
         modelContext.delete(recording)

@@ -9,11 +9,13 @@ struct EneoTalTillTextApp: App {
     @State private var eneoAuthService = EneoAuthService()
 
     @State private var importResult: ImportResult?
+    @Environment(\.scenePhase) private var scenePhase
 
     let modelContainer: ModelContainer?
     let startupError: String?
 
     init() {
+        TranscriptionNotificationPresenter.shared.install()
         do {
             modelContainer = try ModelContainer(for: Recording.self)
             startupError = nil
@@ -42,6 +44,13 @@ struct EneoTalTillTextApp: App {
                     }
                     .task {
                         RecordingPersistence.recoverOnLaunch(context: modelContainer.mainContext)
+                    }
+                    .onChange(of: scenePhase) { _, phase in
+                        // Retention must also apply when the app is merely
+                        // brought back from the background, not only at launch.
+                        if phase == .active {
+                            RecordingPersistence.purgeExpiredRecordings(context: modelContainer.mainContext)
+                        }
                     }
                     .alert(item: $importResult) { result in
                         Alert(
@@ -83,14 +92,15 @@ struct EneoTalTillTextApp: App {
     @MainActor
     private func handleIncomingURL(_ url: URL) {
         guard let modelContainer else { return }
-        guard url.startAccessingSecurityScopedResource() else {
-            importResult = ImportResult(
-                title: String(localized: "Filen kunde inte öppnas", comment: "Rubrik när importerad fil nekas"),
-                message: String(localized: "Appen fick inte tillgång till filen. Försök dela den på nytt.", comment: "Åtgärd när importerad fil nekas")
-            )
-            return
+        // Files handed over via "Copy to" land in the app's own Documents/Inbox
+        // and are not security scoped, so a false return here is normal. Only
+        // the copy below can tell whether the file is actually readable.
+        let didStartAccessing = url.startAccessingSecurityScopedResource()
+        defer {
+            if didStartAccessing {
+                url.stopAccessingSecurityScopedResource()
+            }
         }
-        defer { url.stopAccessingSecurityScopedResource() }
 
         let supportedExtensions = ["m4a", "wav", "mp3", "caf", "aac", "flac"]
         guard supportedExtensions.contains(url.pathExtension.lowercased()) else {
@@ -125,6 +135,7 @@ struct EneoTalTillTextApp: App {
             modelContainer.mainContext.insert(recording)
             try modelContainer.mainContext.save()
             updateDuration(for: recording, fileURL: destination)
+            Self.removeInboxCopyIfNeeded(url)
 
             let recordingTitle = recording.title
             importResult = ImportResult(
@@ -137,6 +148,15 @@ struct EneoTalTillTextApp: App {
                 message: String(localized: "Kontrollera att det finns ledigt utrymme på telefonen och försök igen.", comment: "Åtgärd när importen misslyckades")
             )
         }
+    }
+
+    /// iOS leaves the handed-over copy in Documents/Inbox; it would otherwise
+    /// sit there unprotected and unpurged for as long as the app is installed.
+    private static func removeInboxCopyIfNeeded(_ url: URL) {
+        guard let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
+        let inbox = documents.appendingPathComponent("Inbox", isDirectory: true).standardizedFileURL.path
+        guard url.standardizedFileURL.path.hasPrefix(inbox + "/") else { return }
+        try? FileManager.default.removeItem(at: url)
     }
 
     @MainActor

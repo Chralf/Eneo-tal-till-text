@@ -2,7 +2,9 @@ import SwiftUI
 
 /// Renders CommonMark-style markdown that Eneo typically returns: headings,
 /// lists (including nested), quotes, fenced code, rules, and inline emphasis.
-struct MarkdownResultView: View {
+/// Equatable so a parent can apply `.equatable()` and skip re-parsing the
+/// document on unrelated state changes such as playback progress.
+struct MarkdownResultView: View, Equatable {
     let markdown: String
 
     var body: some View {

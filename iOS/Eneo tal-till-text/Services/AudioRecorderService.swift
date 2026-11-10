@@ -20,6 +20,9 @@ final class AudioRecorderService {
     var audioLevels: [Float] = []
     var wasInterrupted = false
     var reachedMaxDuration = false
+    /// True from stop until the final audio file has been written. The UI
+    /// must not start a new session or dismiss while this is set.
+    var isFinalizing = false
 
     /// Called after each finalized segment with total session duration so far.
     var onSegmentFinalized: ((TimeInterval) -> Void)?
@@ -67,6 +70,16 @@ final class AudioRecorderService {
         }
     }
 
+    /// Current permission without prompting, for re-checks after the user
+    /// returns from the Settings app.
+    var hasRecordPermission: Bool {
+        #if os(iOS)
+        return AVAudioApplication.shared.recordPermission == .granted
+        #else
+        return true
+        #endif
+    }
+
     func requestPermission() async -> Bool {
         #if os(iOS)
         return await AVAudioApplication.requestRecordPermission()
@@ -77,6 +90,9 @@ final class AudioRecorderService {
 
     /// Starts a session. Returns the eventual final file URL (`recording_<epoch>.m4a`).
     func startRecording() throws -> URL {
+        guard !isFinalizing else {
+            throw AudioRecorderError.failedToStart
+        }
         let recordingsDir = try Recording.ensureRecordingsDirectory()
         let baseName = "recording_\(Int(Date().timeIntervalSince1970))"
         let finalURL = RecordingSegmentNaming.finalURL(directory: recordingsDir, baseName: baseName)
@@ -126,6 +142,8 @@ final class AudioRecorderService {
         do {
             try startNextSegment()
         } catch {
+            // Still paused: keep counting paused time so the clock stays right.
+            pauseStartedAt = Date()
             return
         }
         preventDeviceSleep()
@@ -136,6 +154,10 @@ final class AudioRecorderService {
     }
 
     func stopRecording() async -> (url: URL, duration: TimeInterval)? {
+        // A second stop while the first merge is still running must not
+        // re-run the merge or clobber the session that is being finalized.
+        guard !isFinalizing else { return nil }
+
         stopAutosaveTimer()
         stopMetering()
 
@@ -153,6 +175,7 @@ final class AudioRecorderService {
         audioLevels = []
         shouldResumeAfterInterruption = false
         wasInterrupted = false
+        sessionFinalURL = nil
 
         allowDeviceSleep()
         deactivateSession()
@@ -163,6 +186,9 @@ final class AudioRecorderService {
             onSegmentFinalized = nil
             return nil
         }
+
+        isFinalizing = true
+        defer { isFinalizing = false }
 
         let concatOK = await M4aSegmentConcatenator.concatenate(parts: parts, output: finalURL)
         if concatOK {
@@ -273,7 +299,10 @@ final class AudioRecorderService {
             try startNextSegment()
         } catch {
             // Leave session paused-like if we cannot open the next part.
+            // Mark when the pause began so the clock stops with it.
             state = .paused
+            pauseStartedAt = Date()
+            wasInterrupted = true
             stopAutosaveTimer()
             stopMetering()
         }
@@ -402,6 +431,7 @@ final class AudioRecorderService {
         audioRecorder = nil
         audioLevels = []
         shouldResumeAfterInterruption = false
+        sessionFinalURL = nil
         allowDeviceSleep()
         deactivateSession()
 
@@ -411,7 +441,9 @@ final class AudioRecorderService {
             return
         }
 
+        isFinalizing = true
         Task { @MainActor in
+            defer { isFinalizing = false }
             let concatOK = await M4aSegmentConcatenator.concatenate(parts: parts, output: finalURL)
             if concatOK {
                 for part in parts where part.standardizedFileURL != finalURL.standardizedFileURL {
