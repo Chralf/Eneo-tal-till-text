@@ -5,6 +5,7 @@ struct AuthTokenStore {
     private static let tokenService = "se.iteca.EneoTalTillText.auth"
     private static let tokenAccount = "accessToken"
     private static let pendingStateKey = "eneoPendingAuthState"
+    private static let accountEmailAccount = "accountEmail"
 
     private static let legacyAPIKeyService = "se.iteca.EneoTalTillText.api"
     private static let legacyItecaAPIKeyService = "se.iteca.ItecaWhisper.api"
@@ -38,6 +39,24 @@ struct AuthTokenStore {
 
     static func clearPendingState() {
         UserDefaults.standard.removeObject(forKey: pendingStateKey)
+    }
+
+    /// The signed-in account's e-mail, kept so "Inloggad som …" can be shown
+    /// offline after a relaunch. Personal data, so it lives beside the token in
+    /// the device-only Keychain rather than in backed-up UserDefaults.
+    static func loadAccountEmail() -> String? {
+        let value = loadValue(service: tokenService, account: accountEmailAccount)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return value.isEmpty ? nil : value
+    }
+
+    static func saveAccountEmail(_ email: String?) {
+        let trimmed = email?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        saveValue(trimmed, service: tokenService, account: accountEmailAccount)
+    }
+
+    static func clearAccountEmail() {
+        saveValue("", service: tokenService, account: accountEmailAccount)
     }
 
     static func clearLegacyAPIKeys() {

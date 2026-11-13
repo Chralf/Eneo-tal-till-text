@@ -18,6 +18,7 @@ struct RecordingDetailView: View {
     @State private var playbackTimer: Timer?
     @State private var showDeleteConfirmation = false
     @AppStorage(APISettings.appIDStorageKey) private var defaultAppID = APISettings.defaultAppID
+    @AppStorage(APISettings.baseURLStorageKey) private var storedBaseURLString = APISettings.defaultBaseURLString
 
     @State private var selectedAppID = ""
     @State private var availableApps: [EneoApp] = []
@@ -52,6 +53,25 @@ struct RecordingDetailView: View {
 
     private var uploadButtonTitle: LocalizedStringKey {
         recording.hasTranscription ? "Omvandla igen" : "Omvandla till text"
+    }
+
+    private var hasServerAddress: Bool {
+        APISettings.makeBaseURL(from: storedBaseURLString) != nil
+    }
+
+    /// Tells the user what will happen before they tap Convert, so a sign-in
+    /// prompt is expected rather than a surprise.
+    private var eneoConnectionStatusText: String {
+        if authService.isAuthenticated {
+            if let email = authService.accountEmail {
+                return String(localized: "Skickas till Eneo som \(email)", comment: "Rad ovanför Omvandla-knappen när användaren är inloggad. Platshållaren är e-postadressen.")
+            }
+            return String(localized: "Skickas till Eneo", comment: "Rad ovanför Omvandla-knappen när användaren är inloggad utan känd e-post")
+        }
+        if hasServerAddress {
+            return String(localized: "Du loggar in i Eneo när du omvandlar.", comment: "Rad ovanför Omvandla-knappen när användaren inte är inloggad")
+        }
+        return String(localized: "Eneo är inte kopplat. Lägg till serveradress under Inställningar.", comment: "Rad ovanför Omvandla-knappen när ingen serveradress finns")
     }
 
     /// The in-memory presentation is richer, but a failure from a previous
@@ -318,6 +338,12 @@ struct RecordingDetailView: View {
                     }
                     .padding(.vertical, 8)
                 } else {
+                    Text(eneoConnectionStatusText)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+
                     Button {
                         uploadRecording()
                     } label: {
@@ -816,17 +842,23 @@ struct RecordingDetailView: View {
     private func handleUploadFailure(_ error: Error, for recording: Recording) {
         let presentation = ErrorPresentation(error)
 
-        // A rejected token must not keep looking like a valid session.
-        if presentation.requiresSignIn {
-            authService.handleExpiredSession()
-        }
-
         activeUploadError = presentation
-        recording.uploadStatus = "failed"
         recording.uploadProgressText = nil
         recording.uploadError = [presentation.title, presentation.message]
             .compactMap { $0 }
             .joined(separator: "\n")
+
+        // An expired session is a normal event, not a failed conversion: the
+        // recording stays untouched, the banner offers "Logga in igen", and
+        // the upload resumes automatically after sign-in.
+        if presentation.requiresSignIn {
+            authService.handleExpiredSession()
+            recording.uploadStatus = nil
+            try? modelContext.save()
+            return
+        }
+
+        recording.uploadStatus = "failed"
         try? modelContext.save()
 
         Task {

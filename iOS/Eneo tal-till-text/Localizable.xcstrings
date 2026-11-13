@@ -109,14 +109,17 @@
     "Du kan importera ljudfiler av typen m4a, wav, mp3, caf, aac och flac." : {
       "comment" : "Lista över filformat som stöds"
     },
+    "Du kan koppla Eneo senare under Inställningar." : {
+
+    },
     "Du kan nu välja vilken Eneo-app som ska användas för transkriberingar." : {
 
     },
     "Du kan slutföra ändå och välja app senare under Inställningar." : {
 
     },
-    "Du kan spela in och hantera inspelningar utan nät. Inloggning sker när du omvandlar till text — då behöver du nå Eneo-servern." : {
-
+    "Du loggar in i Eneo när du omvandlar." : {
+      "comment" : "Rad ovanför Omvandla-knappen när användaren inte är inloggad"
     },
     "En inspelning är omvandlad till text och finns i appen." : {
       "comment" : "Notistext utan titel, så inget känsligt syns på låsskärmen"
@@ -129,6 +132,9 @@
     },
     "Eneo angav ingen orsak. Det beror ofta på att den valda Eneo-appen använder en transkriberingsmodell som inte stöds. Kontrollera appens modellinställningar i Eneo och försök igen." : {
       "comment" : "Åtgärd när körningen misslyckades utan orsak"
+    },
+    "Eneo är inte kopplat. Lägg till serveradress under Inställningar." : {
+      "comment" : "Rad ovanför Omvandla-knappen när ingen serveradress finns"
     },
     "Eneo kunde inte logga in dig" : {
       "comment" : "Rubrik vid serverfel under inloggning"
@@ -187,7 +193,13 @@
     "Försök logga in igen." : {
       "comment" : "Åtgärd vid trasig inloggning"
     },
+    "Fortsätt" : {
+
+    },
     "Fortsätt spela in" : {
+
+    },
+    "Fortsätt utan Eneo" : {
 
     },
     "Förvald app" : {
@@ -201,6 +213,12 @@
     },
     "Hämtar resultat..." : {
       "comment" : "Status medan resultatet hämtas hem"
+    },
+    "Hoppa över inloggningen" : {
+
+    },
+    "Hoppa över, jag vill bara spela in" : {
+
     },
     "https://eneo.dinorganisation.se" : {
 
@@ -238,6 +256,9 @@
     "Inloggad" : {
 
     },
+    "Inloggad som %@" : {
+
+    },
     "Inloggning pågår redan" : {
       "comment" : "Rubrik när inloggning redan är igång"
     },
@@ -261,6 +282,9 @@
     },
     "Inspelning %@" : {
       "comment" : "Förvald titel på en ny inspelning. Platshållaren är datum och tid."
+    },
+    "Inspelning fungerar utan nät. Inloggningen behövs bara när du omvandlar till text." : {
+
     },
     "Inspelningar sparas lokalt på din enhet." : {
 
@@ -290,6 +314,9 @@
 
     },
     "Klar" : {
+
+    },
+    "Kom igång" : {
 
     },
     "Kommunikation OK" : {
@@ -325,7 +352,7 @@
     "Kontrollerar anslutning" : {
 
     },
-    "Kontrollerar anslutning till servern" : {
+    "Kontrollerar anslutning..." : {
 
     },
     "Kontrollerar servern" : {
@@ -403,6 +430,9 @@
     "Logga in med det konto du använder hos din organisation." : {
 
     },
+    "Logga in med Eneo" : {
+
+    },
     "Logga ut" : {
 
     },
@@ -424,7 +454,7 @@
     "Något gick fel" : {
       "comment" : "Rubrik för fel utan känd orsak"
     },
-    "Når ej server" : {
+    "Når inte Eneo-servern just nu" : {
 
     },
     "Ofullständigt svar från Eneo" : {
@@ -510,6 +540,15 @@
     },
     "Servern svarar." : {
       "comment" : "Servertest utan inloggning"
+    },
+    "Skickas till Eneo" : {
+      "comment" : "Rad ovanför Omvandla-knappen när användaren är inloggad utan känd e-post"
+    },
+    "Skickas till Eneo som %@" : {
+      "comment" : "Rad ovanför Omvandla-knappen när användaren är inloggad. Platshållaren är e-postadressen."
+    },
+    "Slutför" : {
+
     },
     "Slutför inloggning..." : {
       "comment" : "Status medan koden växlas mot token"
@@ -631,6 +670,9 @@
     },
     "Väntar på inloggning..." : {
       "comment" : "Status medan användaren loggar in"
+    },
+    "Verifiera server" : {
+
     },
     "Verifierar inloggning..." : {
       "comment" : "Status medan sessionen verifieras"

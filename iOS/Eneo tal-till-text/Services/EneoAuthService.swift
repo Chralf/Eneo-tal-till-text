@@ -5,6 +5,8 @@ import Observation
 @MainActor
 final class EneoAuthService {
     var isAuthenticated = AuthTokenStore.hasAccessToken
+    /// E-mail of the signed-in account, when the server reported one.
+    var accountEmail: String? = AuthTokenStore.loadAccountEmail()
     var isSigningIn = false
     var statusText: String?
     var errorPresentation: ErrorPresentation?
@@ -18,8 +20,12 @@ final class EneoAuthService {
     /// A stored token says nothing about whether it still works, so the session
     /// is re-checked against the server rather than inferred from the Keychain.
     func refreshAuthenticationState() async {
+        // A check racing a sign-in in progress could clear the token it is
+        // about to verify.
+        guard !isSigningIn else { return }
         guard AuthTokenStore.hasAccessToken else {
             isAuthenticated = false
+            accountEmail = nil
             return
         }
 
@@ -27,7 +33,8 @@ final class EneoAuthService {
             try await verifySession()
             isAuthenticated = true
         } catch EneoAuthError.verificationFailed(let statusCode) where statusCode == 401 || statusCode == 403 {
-            signOut()
+            // An expired token, not a sign-out: keep the SSO session.
+            handleExpiredSession()
         } catch EneoAuthError.missingAccessToken {
             isAuthenticated = false
         } catch {
@@ -40,7 +47,11 @@ final class EneoAuthService {
     func handleExpiredSession() {
         AuthTokenStore.clearAccessToken()
         AuthTokenStore.clearPendingState()
+        AuthTokenStore.clearAccountEmail()
         isAuthenticated = false
+        accountEmail = nil
+        // The IdP cookies are deliberately kept: the next sign-in should pass
+        // through the remembered SSO session instead of asking for a password.
     }
 
     func beginSignIn() async throws -> URL {
@@ -88,7 +99,9 @@ final class EneoAuthService {
             // proceed as if login succeeded.
             AuthTokenStore.clearAccessToken()
             AuthTokenStore.clearPendingState()
+            AuthTokenStore.clearAccountEmail()
             isAuthenticated = false
+            accountEmail = nil
             statusText = nil
             errorPresentation = ErrorPresentation(error)
         }
@@ -102,13 +115,20 @@ final class EneoAuthService {
         statusText = nil
     }
 
+    /// Explicit sign-out. Unlike an expired session this also forgets the
+    /// identity provider's cookies, so the next sign-in asks for credentials.
     func signOut() {
         AuthTokenStore.clearAccessToken()
         AuthTokenStore.clearPendingState()
+        AuthTokenStore.clearAccountEmail()
         isAuthenticated = false
+        accountEmail = nil
         isSigningIn = false
         statusText = nil
         errorPresentation = nil
+        Task {
+            await LoginWebSession.clear()
+        }
     }
 
     func verifySession() async throws {
@@ -122,13 +142,35 @@ final class EneoAuthService {
         request.httpMethod = "GET"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
-        let (_, response) = try await urlSession.data(for: request)
+        let (data, response) = try await urlSession.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw EneoAuthError.invalidResponse
         }
         guard 200..<300 ~= httpResponse.statusCode else {
             throw EneoAuthError.verificationFailed(statusCode: httpResponse.statusCode)
         }
+
+        if let email = Self.parseAccountEmail(from: data) {
+            accountEmail = email
+            AuthTokenStore.saveAccountEmail(email)
+        }
+    }
+
+    /// Eneo's user endpoint is not pinned to one schema, so accept the most
+    /// likely identity fields in order of usefulness.
+    nonisolated static func parseAccountEmail(from data: Data) -> String? {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return nil
+        }
+        for key in ["email", "username", "name"] {
+            if let value = object[key] as? String {
+                let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    return trimmed
+                }
+            }
+        }
+        return nil
     }
 
     private func initiateAuthentication() async throws -> InitiateAuthResponse {

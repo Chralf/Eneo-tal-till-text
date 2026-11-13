@@ -1,6 +1,16 @@
 import SwiftUI
 import WebKit
 
+/// Website data (cookies, storage) left by the in-app login page.
+enum LoginWebSession {
+    @MainActor
+    static func clear() async {
+        let store = WKWebsiteDataStore.default()
+        let types = WKWebsiteDataStore.allWebsiteDataTypes()
+        await store.removeData(ofTypes: types, modifiedSince: .distantPast)
+    }
+}
+
 struct EneoLoginWebView: UIViewRepresentable {
     let authorizationURL: URL
     let callbackHost: String
@@ -13,10 +23,10 @@ struct EneoLoginWebView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
-        // Cookies from the identity provider must not outlive the sign-in.
-        // With a persistent store, "Logga ut" would still leave the next login
-        // to pass straight through on the remembered IdP session.
-        configuration.websiteDataStore = .nonPersistent()
+        // The identity provider's session is kept between sign-ins so that a
+        // re-login after an expired token is usually a single tap. An explicit
+        // "Logga ut" wipes it via LoginWebSession.clear().
+        configuration.websiteDataStore = .default()
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = context.coordinator

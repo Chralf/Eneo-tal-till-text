@@ -20,6 +20,7 @@ struct SettingsView: View {
     @State private var personalSpaceID: String?
     @State private var noticeAlert: SettingsNoticeAlert?
     @State private var showSignOutConfirmation = false
+    @State private var showConnectSheet = false
     @State private var showAppPicker = false
     @State private var serverReachability: SettingsServerReachability = .checking
     @State private var pendingRetentionDays: Int?
@@ -123,6 +124,18 @@ struct SettingsView: View {
                         }
                     }
             }
+            .sheet(isPresented: $showConnectSheet, onDismiss: {
+                if authService.isAuthenticated {
+                    serverReachability = .reachable
+                    loadApps(openPickerWhenDone: false)
+                }
+            }) {
+                EneoConnectView(
+                    onFinished: { _ in
+                        showConnectSheet = false
+                    }
+                )
+            }
             .alert("Ändra gallring?", isPresented: $showRetentionWarning) {
                 Button("Avbryt", role: .cancel) {
                     pendingRetentionDays = nil
@@ -214,6 +227,8 @@ struct SettingsView: View {
         }
     }
 
+    /// Sign-in and sign-out are both offered here, so the account is something
+    /// the user can see and control rather than a prompt that appears mid-task.
     @ViewBuilder
     private var accountSection: some View {
         Section {
@@ -221,15 +236,37 @@ struct SettingsView: View {
                 accountStatusLabel
             }
 
-            if serverReachability == .reachable, authService.isAuthenticated {
+            if serverReachability == .unreachable {
+                Label("Når inte Eneo-servern just nu", systemImage: "wifi.slash")
+                    .labelStyle(.titleAndIcon)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+
+            if authService.isAuthenticated {
+                // Signing out is local, so it must not depend on reachability.
                 Button("Logga ut", role: .destructive) {
                     showSignOutConfirmation = true
                 }
+            } else {
+                Button {
+                    beginSignIn()
+                } label: {
+                    if isCheckingServer {
+                        HStack {
+                            ProgressView()
+                            Text("Kontrollerar anslutning...")
+                        }
+                    } else {
+                        Label("Logga in i Eneo", systemImage: "person.crop.circle.badge.checkmark")
+                    }
+                }
+                .disabled(!isBaseURLValid || isCheckingServer)
             }
         } header: {
             Text("Eneo-konto")
         } footer: {
-            Text("Du kan spela in och hantera inspelningar utan nät. Inloggning sker när du omvandlar till text — då behöver du nå Eneo-servern.")
+            Text("Inspelning fungerar utan nät. Inloggningen behövs bara när du omvandlar till text.")
         }
         .confirmationDialog("Logga ut från Eneo?", isPresented: $showSignOutConfirmation, titleVisibility: .visible) {
             Button("Logga ut", role: .destructive) {
@@ -241,26 +278,25 @@ struct SettingsView: View {
         }
     }
 
+    /// Account state is shown regardless of reachability; being offline is
+    /// reported separately and never hides whether the user is signed in.
     @ViewBuilder
     private var accountStatusLabel: some View {
-        switch serverReachability {
-        case .checking:
-            ProgressView()
-                .accessibilityLabel("Kontrollerar anslutning till servern")
-        case .unreachable:
-            Label("Når ej server", systemImage: "wifi.slash")
-                .labelStyle(.titleAndIcon)
-                .foregroundStyle(.secondary)
-        case .reachable:
-            if authService.isAuthenticated {
+        if authService.isAuthenticated {
+            if let email = authService.accountEmail {
+                Label("Inloggad som \(email)", systemImage: "checkmark.circle.fill")
+                    .labelStyle(.titleAndIcon)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.trailing)
+            } else {
                 Label("Inloggad", systemImage: "checkmark.circle.fill")
                     .labelStyle(.titleAndIcon)
                     .foregroundStyle(.secondary)
-            } else {
-                Label("Utloggad", systemImage: "person.crop.circle.badge.questionmark")
-                    .labelStyle(.titleAndIcon)
-                    .foregroundStyle(.secondary)
             }
+        } else {
+            Label("Utloggad", systemImage: "person.crop.circle.badge.questionmark")
+                .labelStyle(.titleAndIcon)
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -386,6 +422,19 @@ struct SettingsView: View {
     private func signOut() {
         authService.signOut()
         resetConnectionState()
+    }
+
+    private func beginSignIn() {
+        guard !isCheckingServer else { return }
+        commitServerChange()
+        Task {
+            guard await ensureServerReachable() else { return }
+            // A stuck sign-in flag must not swallow the button.
+            if authService.isSigningIn {
+                authService.cancelSignIn()
+            }
+            showConnectSheet = true
+        }
     }
 
     private func resetConnectionState() {

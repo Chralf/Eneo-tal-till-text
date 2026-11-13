@@ -44,4 +44,21 @@ struct AppLogicTests {
         #expect(APISettings.makeBaseURL(from: "eneo.kommun.se")?.absoluteString == "https://eneo.kommun.se")
         #expect(APISettings.makeBaseURL(from: "http://eneo.kommun.se") == nil)
     }
+
+    @Test func parseAccountEmailPrefersEmailThenUsername() throws {
+        let withEmail = Data(#"{"email": " anna@kommun.se ", "username": "anna"}"#.utf8)
+        #expect(EneoAuthService.parseAccountEmail(from: withEmail) == "anna@kommun.se")
+
+        let withoutEmail = Data(#"{"username": "anna", "name": "Anna"}"#.utf8)
+        #expect(EneoAuthService.parseAccountEmail(from: withoutEmail) == "anna")
+
+        let emptyEmail = Data(#"{"email": "", "name": "Anna"}"#.utf8)
+        #expect(EneoAuthService.parseAccountEmail(from: emptyEmail) == "Anna")
+
+        let empty = Data("{}".utf8)
+        #expect(EneoAuthService.parseAccountEmail(from: empty) == nil)
+
+        let notAnObject = Data("[1, 2]".utf8)
+        #expect(EneoAuthService.parseAccountEmail(from: notAnObject) == nil)
+    }
 }

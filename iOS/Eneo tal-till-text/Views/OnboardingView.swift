@@ -339,9 +339,12 @@ struct OnboardingView: View {
         case .welcome:
             primaryButton("Kom igång") { step = .serverURL }
         case .serverURL:
-            primaryButton("Verifiera server", disabled: !isServerURLValid) {
-                step = .verifyServer
-                startVerification()
+            VStack(spacing: 12) {
+                primaryButton("Verifiera server", disabled: !isServerURLValid) {
+                    step = .verifyServer
+                    startVerification()
+                }
+                skipEneoButton("Hoppa över, jag vill bara spela in")
             }
         case .verifyServer:
             verifyActions
@@ -375,6 +378,7 @@ struct OnboardingView: View {
                     step = .serverURL
                 }
                 .frame(maxWidth: .infinity)
+                skipEneoButton("Fortsätt utan Eneo")
             }
         }
     }
@@ -383,7 +387,10 @@ struct OnboardingView: View {
     private var loginActions: some View {
         switch loginPhase {
         case .prompt:
-            primaryButton("Logga in med Eneo") { beginLogin() }
+            VStack(spacing: 12) {
+                primaryButton("Logga in med Eneo") { beginLogin() }
+                skipEneoButton("Hoppa över inloggningen")
+            }
         case .signingIn:
             EmptyView()
         case .signedIn:
@@ -391,11 +398,31 @@ struct OnboardingView: View {
         }
     }
 
+    /// Recording never needs Eneo, so the connection can be postponed. The
+    /// server address entered so far is kept for Settings.
+    private func skipEneoButton(_ title: LocalizedStringKey) -> some View {
+        VStack(spacing: 4) {
+            Button(title) {
+                finishWithoutEneo()
+            }
+            .frame(maxWidth: .infinity)
+            Text("Du kan koppla Eneo senare under Inställningar.")
+                .font(.footnote)
+                .foregroundStyle(.tertiary)
+                .multilineTextAlignment(.center)
+        }
+    }
+
+    private func finishWithoutEneo() {
+        OnboardingStore.markCompleted()
+        onComplete()
+    }
+
     private var isServerURLValid: Bool {
         APISettings.makeBaseURL(from: serverURLDraft) != nil
     }
 
-    private func primaryButton(_ title: String, disabled: Bool = false, action: @escaping () -> Void) -> some View {
+    private func primaryButton(_ title: LocalizedStringKey, disabled: Bool = false, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
                 .font(.headline)

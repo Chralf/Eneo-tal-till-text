@@ -110,7 +110,9 @@ final class Recording {
         if uploadStatus == "processing" || isTranscribing {
             return .processing
         }
-        if uploadStatus == "failed" || !(uploadError?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) {
+        // An expired sign-in keeps its explanation in uploadError but is not
+        // a failed conversion, so only the status decides.
+        if uploadStatus == "failed" {
             return .failed
         }
         if hasTranscription {

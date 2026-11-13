@@ -50,6 +50,11 @@ struct EneoTalTillTextApp: App {
                         // brought back from the background, not only at launch.
                         if phase == .active {
                             RecordingPersistence.purgeExpiredRecordings(context: modelContainer.mainContext)
+                            // Let Settings and the detail view show the real
+                            // session state before the user acts on it.
+                            Task {
+                                await eneoAuthService.refreshAuthenticationState()
+                            }
                         }
                     }
                     .alert(item: $importResult) { result in
