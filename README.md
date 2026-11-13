@@ -1,15 +1,15 @@
 # Eneo tal-till-text
 
-Klienter för att spela in tal och skicka till **Eneo** för omvandling till text (transkribering/sammanfattning via vald Eneo-app).
+Mobilappar för att spela in tal, spara det lokalt och skicka till **Eneo** för omvandling till text (transkribering/sammanfattning via vald Eneo-app).
 
-iOS och Android delar samma arbetsflöde. Under [`Teams/`](Teams/) finns en personal tab för Microsoft Teams med samma API-flöde.
+Båda plattformarna delar samma arbetsflöde och ungefär samma funktioner, men är byggda med respektive plattforms egna verktyg.
 
-| | iOS | Android | Teams |
-|---|---|---|---|
-| Mapp | [`iOS/`](iOS/) | [`Android/`](Android/) | [`Teams/`](Teams/) |
-| Teknik | SwiftUI, SwiftData | Kotlin, Jetpack Compose, Room | Vite, React, TeamsJS |
-| Bundle / package | `se.iteca.ciklid.Eneo-tal-till-text` | `se.iteca.eneotaltilltext` | Teams personal tab |
-| Min OS | iOS 26.4 | API 33 (Android 13) | Teams Desktop (HTTPS-host) |
+| | iOS | Android |
+|---|---|---|
+| Mapp | [`iOS/`](iOS/) | [`Android/`](Android/) |
+| Teknik | SwiftUI, SwiftData | Kotlin, Jetpack Compose, Room |
+| Bundle / package | `se.iteca.ciklid.Eneo-tal-till-text` | `se.iteca.eneotaltilltext` |
+| Min OS | iOS 26.4 | API 33 (Android 13) |
 
 ---
 
@@ -39,7 +39,6 @@ iOS och Android delar samma arbetsflöde. Under [`Teams/`](Teams/) finns en pers
 │   ├── Eneo tal-till-text.xcodeproj
 │   ├── Eneo tal-till-text/          # källkod
 │   └── Eneo tal-till-textTests/     # unit tests
-├── Teams/            # Microsoft Teams personal tab (Vite/React)
 └── README.md
 ```
 
@@ -142,24 +141,10 @@ cd Android
 
 ---
 
-## Teams
-
-Personal tab som återanvänder samma Eneo-API (auth med 2FA, files/runs/poll). Standard bas-URL är `https://eneo.kommun.se` som i mobilapparna.
-
-```bash
-cd Teams
-npm install
-npm run dev
-```
-
-Se [`Teams/README.md`](Teams/README.md) för HTTPS-host, `redirect_uri` hos Eneo/IdP och sideload av manifest.
-
----
-
 ## Bidra / utveckla
 
 1. Klona repot.
-2. Jobba i `iOS/`, `Android/` eller `Teams/` (håll klienterna i synk vid gemensamma beteendeförändringar).
+2. Jobba i `iOS/` eller `Android/` (håll plattformarna i synk vid gemensamma beteendeförändringar).
 3. Checka inte in hemligheter eller lokala SDK-sökvägar.
 
 Frågor kring Eneo-servern (appar, tokens, ACL) hör till backend/plattformen — den här repot innehåller bara klienterna. Mer om Eneo finns på [eneo.ai](https://eneo.ai).

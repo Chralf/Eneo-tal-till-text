@@ -15,11 +15,6 @@ IMG_*.jpeg
 icon.jpg
 **/Apple Human Interface Guideline/
 
-# Teams local artifacts
-Teams/node_modules/
-Teams/dist/
-Teams/eneo-teams-manifest.zip
-
 # Secrets & local config
 **/*.jks
 **/*.keystore
