@@ -27,8 +27,8 @@ android {
         applicationId = "se.iteca.eneotaltilltext"
         minSdk = 33
         targetSdk = 37
-        versionCode = 22
-        versionName = "2.10"
+        versionCode = 23
+        versionName = "2.11"
     }
 
     signingConfigs {
