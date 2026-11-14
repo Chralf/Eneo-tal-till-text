@@ -25,6 +25,18 @@
         }
       }
     },
+    "NSLocalNetworkUsageDescription" : {
+      "comment" : "Privacy - Local Network Usage Description",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "sv" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Appen behöver nå din organisations Eneo-server på det lokala nätverket för att omvandla inspelningar till text."
+          }
+        }
+      }
+    },
     "NSMicrophoneUsageDescription" : {
       "comment" : "Visas i systemets dialog när appen begär mikrofonåtkomst.",
       "extractionState" : "manual",

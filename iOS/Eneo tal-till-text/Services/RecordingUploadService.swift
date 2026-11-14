@@ -157,6 +157,14 @@ struct RecordingResultMetadata {
 
 private struct StaleRunError: Error {}
 
+/// Whether the Eneo host answered the latest probe. Being unreachable is the
+/// normal state outside the organisation's network, not an error.
+enum ServerReachability {
+    case unknown
+    case reachable
+    case unreachable
+}
+
 @Observable
 @MainActor
 final class RecordingUploadService {
@@ -166,6 +174,9 @@ final class RecordingUploadService {
     var isUploading = false
     var statusText: String?
     var uploadingRecordingID: UUID?
+    /// Updated by every probe, so all screens share one answer.
+    var serverReachability: ServerReachability = .unknown
+    var isCheckingReachability = false
 
     private var inFlightUpload: Task<Void, Never>?
 
@@ -188,7 +199,10 @@ final class RecordingUploadService {
         isUploading && uploadingRecordingID == recording.id
     }
 
-    func performUpload(recordingID: UUID, operation: @escaping @MainActor () async -> Void) {
+    /// Returns a task that finishes once the upload and its cleanup are done,
+    /// so a caller can run uploads one after another.
+    @discardableResult
+    func performUpload(recordingID: UUID, operation: @escaping @MainActor () async -> Void) -> Task<Void, Never> {
         inFlightUpload?.cancel()
         uploadingRecordingID = recordingID
         // Busy from the first moment so a second tap cannot start a parallel
@@ -211,7 +225,7 @@ final class RecordingUploadService {
             await operation()
         }
         inFlightUpload = task
-        Task { @MainActor in
+        return Task { @MainActor in
             await task.value
             #if canImport(UIKit)
             if backgroundTask != .invalid {
@@ -240,6 +254,39 @@ final class RecordingUploadService {
     /// Lightweight reachability: any HTTP response means the host is reachable
     /// (even 401/404). Connection failures surface as network guidance.
     func probeServerReachability() async throws {
+        do {
+            try await probe()
+            serverReachability = .reachable
+        } catch {
+            serverReachability = .unreachable
+            throw error
+        }
+    }
+
+    /// Probe without throwing, for status displays.
+    func refreshServerReachability() async {
+        isCheckingReachability = true
+        defer { isCheckingReachability = false }
+        try? await probeServerReachability()
+    }
+
+    private func probe() async throws {
+        do {
+            try await probeOnce()
+        } catch let error as URLError where Self.isTransientConnectionError(error) {
+            // An on-demand VPN starts its tunnel on the first request to the
+            // host; that request can fail before the tunnel is up.
+            try await Task.sleep(for: .seconds(2))
+            try await probeOnce()
+        }
+    }
+
+    nonisolated private static func isTransientConnectionError(_ error: URLError) -> Bool {
+        [.cannotConnectToHost, .networkConnectionLost, .notConnectedToInternet, .cannotFindHost]
+            .contains(error.code)
+    }
+
+    private func probeOnce() async throws {
         let baseURL = try APISettings.loadBaseURL()
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 12

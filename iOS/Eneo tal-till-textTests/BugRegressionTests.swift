@@ -30,8 +30,14 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
     }
 }
 
-@MainActor
+/// Suites that stub Eneo share `StubURLProtocol.responses`, UserDefaults and
+/// the Keychain token, so they must never run in parallel with each other.
 @Suite(.serialized)
+struct StubbedEneoTests {}
+
+extension StubbedEneoTests {
+@MainActor
+@Suite
 struct BugRegressionTests {
     @Test func mergeTempFileIsNeitherAPartNorARecording() {
         let name = "recording_1700000000\(RecordingSegmentNaming.mergeTempSuffix)"
@@ -110,4 +116,5 @@ struct BugRegressionTests {
 
         try await body(RecordingUploadService(urlSession: StubURLProtocol.makeSession()))
     }
+}
 }

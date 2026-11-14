@@ -11,6 +11,7 @@ struct RecordingDetailView: View {
 
     @Environment(RecordingUploadService.self) private var uploadService
     @Environment(EneoAuthService.self) private var authService
+    @Environment(ConversionCoordinator.self) private var coordinator
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
 
@@ -47,35 +48,25 @@ struct RecordingDetailView: View {
     /// it parses the whole markdown document, and the body is re-evaluated
     /// several times a second during playback.
     @State private var sharePlainText = ""
-    /// Failure from an upload in this session, with symbol and sign-in hint.
-    /// Persisted text takes over after a relaunch.
-    @State private var activeUploadError: ErrorPresentation?
-
     private var displayedUploadError: ErrorPresentation? {
-        activeUploadError ?? persistedUploadError
+        coordinator.lastErrors[recording.id] ?? persistedUploadError
+    }
+
+    /// Outside the organisation's network Convert queues the recording, and
+    /// the button says so up front.
+    private var isEneoUnreachable: Bool {
+        uploadService.serverReachability == .unreachable
     }
 
     private var uploadButtonTitle: LocalizedStringKey {
-        recording.hasTranscription ? "Omvandla igen" : "Omvandla till text"
+        if isEneoUnreachable {
+            return "Omvandla när Eneo nås"
+        }
+        return recording.hasTranscription ? "Omvandla igen" : "Omvandla till text"
     }
 
     private var hasServerAddress: Bool {
         APISettings.makeBaseURL(from: storedBaseURLString) != nil
-    }
-
-    /// Tells the user what will happen before they tap Convert, so a sign-in
-    /// prompt is expected rather than a surprise.
-    private var eneoConnectionStatusText: String {
-        if authService.isAuthenticated {
-            if let email = authService.accountEmail {
-                return String(localized: "Skickas till Eneo som \(email)", comment: "Rad ovanför Omvandla-knappen när användaren är inloggad. Platshållaren är e-postadressen.")
-            }
-            return String(localized: "Skickas till Eneo", comment: "Rad ovanför Omvandla-knappen när användaren är inloggad utan känd e-post")
-        }
-        if hasServerAddress {
-            return String(localized: "Du loggar in i Eneo när du omvandlar.", comment: "Rad ovanför Omvandla-knappen när användaren inte är inloggad")
-        }
-        return String(localized: "Eneo är inte kopplat. Lägg till serveradress under Inställningar.", comment: "Rad ovanför Omvandla-knappen när ingen serveradress finns")
     }
 
     /// The in-memory presentation is richer, but a failure from a previous
@@ -127,6 +118,11 @@ struct RecordingDetailView: View {
         }
         .task {
             await recoverMissingAudioIfPossible()
+            if recording.transcriptionState == .queued {
+                // The network may have changed while the app stayed open.
+                await uploadService.refreshServerReachability()
+                await coordinator.processQueue(context: modelContext)
+            }
             if autoStartUpload {
                 onAutoStartHandled?()
                 if recording.audioFileExists, !recording.hasTranscription, !uploadService.isUploading {
@@ -353,18 +349,38 @@ struct RecordingDetailView: View {
                         .buttonStyle(.bordered)
                     }
                     .padding(.vertical, 8)
+                } else if recording.transcriptionState == .queued {
+                    HStack(spacing: 12) {
+                        Image(systemName: "clock")
+                            .foregroundStyle(.secondary)
+                            .accessibilityHidden(true)
+
+                        Text("Väntar på Eneo")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                        Button("Avbryt") {
+                            coordinator.cancelWaiting(recording, context: modelContext)
+                        }
+                        .buttonStyle(.bordered)
+                        .accessibilityLabel("Sluta vänta på omvandling")
+                    }
+                    .padding(.vertical, 8)
                 } else {
-                    Text(eneoConnectionStatusText)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .frame(maxWidth: .infinity)
+                    if !hasServerAddress {
+                        Text("Lägg till serveradress under Inställningar.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: .infinity)
+                    }
 
                     Button {
                         uploadRecording()
                     } label: {
                         HStack(spacing: 10) {
-                            Image(systemName: "arrow.up.circle.fill")
+                            Image(systemName: isEneoUnreachable ? "clock" : "arrow.up.circle.fill")
                             Text(uploadButtonTitle)
                                 .font(.headline)
                         }
@@ -729,9 +745,18 @@ struct RecordingDetailView: View {
     private func uploadRecording() {
         guard !uploadService.isUploading else { return }
         guard !isCheckingServer else { return }
+        guard hasServerAddress else {
+            presentNotice(ErrorPresentation(RecordingUploadError.missingServerURL))
+            return
+        }
 
         Task {
-            guard await ensureServerReachable(reportToAppSelection: false) else { return }
+            // Outside the organisation's network the recording waits and is
+            // converted the next time the app opens where Eneo answers.
+            guard await isServerReachableNow() else {
+                coordinator.enqueue(recording, context: modelContext)
+                return
+            }
 
             guard authService.isAuthenticated else {
                 beginLogin(thenUpload: true, thenOpenApps: false)
@@ -752,72 +777,17 @@ struct RecordingDetailView: View {
 
     @MainActor
     private func startUploadNow() {
-        guard !uploadService.isUploading else { return }
-
-        let appID = normalizedSelectedAppID()
-        // Capture the app that owns a resumable run before persisting the new
-        // picker selection. Otherwise changing the app makes an old run look
-        // compatible and can attach the wrong result to this recording.
-        let previousRunAppID = recording.uploadAppID?.trimmingCharacters(in: .whitespacesAndNewlines)
-        applySelectedAppMetadata()
-        if recording.hasTranscription {
-            recording.uploadServerID = nil
-        } else if let existingRun = recording.uploadServerID?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !existingRun.isEmpty,
-           let runApp = previousRunAppID,
-           !runApp.isEmpty,
-           runApp != appID {
-            recording.uploadServerID = nil
-        }
         clearNotice()
-        clearUploadError()
-        recording.uploadStatus = "processing"
-        recording.uploadProgressText = String(localized: "Laddar upp ljud...", comment: "Status medan ljudfilen skickas")
+        guard coordinator.convert(recording, appID: normalizedSelectedAppID(), context: modelContext) != nil else { return }
+        applySelectedAppMetadata()
         try? modelContext.save()
-
-        let recordingToUpload = recording
-        uploadService.performUpload(recordingID: recordingToUpload.id) {
-            await TranscriptionNotificationService.requestAuthorizationIfNeeded()
-
-            do {
-                let response = try await uploadService.upload(recordingToUpload, appID: appID) { fileID, runID in
-                    if let fileID {
-                        recordingToUpload.uploadFileID = fileID
-                    }
-                    if let runID {
-                        recordingToUpload.uploadServerID = runID
-                    }
-                    try? modelContext.save()
-                }
-                guard !recordingToUpload.isDeleted, recordingToUpload.modelContext != nil else { return }
-                recordingToUpload.uploadFileID = response.fileID
-                recordingToUpload.uploadServerID = response.id
-                recordingToUpload.uploadStatus = response.status ?? "complete"
-                recordingToUpload.uploadProgressText = nil
-                recordingToUpload.uploadedAt = Date()
-                recordingToUpload.transcriptionText = response.output
-                applySelectedAppMetadata()
-                updateMetadata(from: response.output)
-                recordingToUpload.uploadError = nil
-                try? modelContext.save()
-                if recordingToUpload.hasTranscription {
-                    await TranscriptionNotificationService.notifyCompleted()
-                }
-            } catch is CancellationError {
-                resetAfterCancelledUpload(recordingToUpload)
-            } catch let error as URLError where error.code == .cancelled {
-                resetAfterCancelledUpload(recordingToUpload)
-            } catch {
-                handleUploadFailure(error, for: recordingToUpload)
-            }
-        }
     }
 
     private func beginSelectApp() {
         guard !isCheckingServer else { return }
         pendingUploadAfterAppPick = false
         Task {
-            guard await ensureServerReachable(reportToAppSelection: true) else { return }
+            guard await ensureServerReachable() else { return }
             if authService.isAuthenticated {
                 openAppPickerAfterAuth()
             } else {
@@ -831,9 +801,21 @@ struct RecordingDetailView: View {
         showAppPicker = true
     }
 
+    @MainActor
+    private func isServerReachableNow() async -> Bool {
+        isCheckingServer = true
+        defer { isCheckingServer = false }
+        do {
+            try await uploadService.probeServerReachability()
+            return true
+        } catch {
+            return false
+        }
+    }
+
     /// Returns false when the host cannot be reached; surfaces network guidance.
     @MainActor
-    private func ensureServerReachable(reportToAppSelection: Bool) async -> Bool {
+    private func ensureServerReachable() async -> Bool {
         isCheckingServer = true
         defer { isCheckingServer = false }
         do {
@@ -841,55 +823,12 @@ struct RecordingDetailView: View {
             return true
         } catch {
             presentNotice(ErrorPresentation(error))
-            if !reportToAppSelection {
-                activeUploadError = nil
-                recording.uploadError = nil
-                recording.uploadStatus = nil
-                recording.uploadProgressText = nil
-                try? modelContext.save()
-            }
             return false
         }
     }
 
     private func cancelUpload() {
         uploadService.cancelInFlightUpload()
-    }
-
-    private func resetAfterCancelledUpload(_ recording: Recording) {
-        guard !recording.isDeleted, recording.modelContext != nil else { return }
-        recording.uploadStatus = nil
-        recording.uploadProgressText = nil
-        recording.uploadError = nil
-        try? modelContext.save()
-    }
-
-    private func handleUploadFailure(_ error: Error, for recording: Recording) {
-        guard !recording.isDeleted, recording.modelContext != nil else { return }
-        let presentation = ErrorPresentation(error)
-
-        activeUploadError = presentation
-        recording.uploadProgressText = nil
-        recording.uploadError = [presentation.title, presentation.message]
-            .compactMap { $0 }
-            .joined(separator: "\n")
-
-        // An expired session is a normal event, not a failed conversion: the
-        // recording stays untouched, the banner offers "Logga in igen", and
-        // the upload resumes automatically after sign-in.
-        if presentation.requiresSignIn {
-            authService.handleExpiredSession()
-            recording.uploadStatus = nil
-            try? modelContext.save()
-            return
-        }
-
-        recording.uploadStatus = "failed"
-        try? modelContext.save()
-
-        Task {
-            await TranscriptionNotificationService.notifyFailed()
-        }
     }
 
     private func beginLogin(thenUpload: Bool, thenOpenApps: Bool = false) {
@@ -920,26 +859,8 @@ struct RecordingDetailView: View {
     }
 
     private func clearUploadError() {
-        activeUploadError = nil
-        recording.uploadError = nil
-        try? modelContext.save()
+        coordinator.clearError(for: recording, context: modelContext)
     }
-
-    private func updateMetadata(from output: String?) {
-        guard let output, !output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            recording.summaryText = nil
-            return
-        }
-        let metadata = uploadService.metadata(from: output)
-        recording.summaryText = metadata.shortSummary
-        let placeholder = recording.hasPlaceholderTitle
-        if let suggested = metadata.suggestedTitle?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !suggested.isEmpty,
-           placeholder {
-            recording.title = suggested
-        }
-    }
-
 
     private func deleteRecording() {
         stopPlayback()

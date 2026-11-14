@@ -16,7 +16,7 @@
     "1 dag" : {
       "comment" : "Gallringsval: en dag"
     },
-    "Adressen till din organisations Eneo. Byter du adress loggas du ut." : {
+    "Adressen till din organisations Eneo." : {
 
     },
     "Ändra" : {
@@ -37,8 +37,17 @@
     "Ange en giltig serveradress" : {
 
     },
+    "Ange serveradress…" : {
+
+    },
     "Anslut till Eneo" : {
 
+    },
+    "Anslut till ett nät där Eneo är tillgängligt och försök igen." : {
+
+    },
+    "Ansluten till %@" : {
+      "comment" : "Kontomeny när Eneo svarar. Platshållaren är serverns värdnamn."
     },
     "Appen är gratis och fortsätter vara det." : {
 
@@ -118,9 +127,6 @@
     "Du kan välja app senare under Inställningar." : {
 
     },
-    "Du loggar in i Eneo när du omvandlar." : {
-      "comment" : "Rad ovanför Omvandla-knappen när användaren inte är inloggad"
-    },
     "En inspelning är omvandlad till text och finns i appen." : {
       "comment" : "Notistext utan titel, så inget känsligt syns på låsskärmen"
     },
@@ -133,22 +139,22 @@
     "Eneo angav ingen orsak. Det beror ofta på att den valda Eneo-appen använder en transkriberingsmodell som inte stöds. Kontrollera appens modellinställningar i Eneo och försök igen." : {
       "comment" : "Åtgärd när körningen misslyckades utan orsak"
     },
-    "Eneo är inte kopplat. Lägg till serveradress under Inställningar." : {
-      "comment" : "Rad ovanför Omvandla-knappen när ingen serveradress finns"
-    },
     "Eneo kunde inte logga in dig" : {
       "comment" : "Rubrik vid serverfel under inloggning"
     },
     "Eneo kunde inte utföra begäran" : {
       "comment" : "Rubrik vid serverfel"
     },
+    "Eneo nås inte" : {
+
+    },
+    "Eneo nås inte just nu" : {
+      "comment" : "Kontomeny när Eneo inte svarar"
+    },
     "Eneo skickade tillbaka ett tomt resultat." : {
       "comment" : "Fel när körningen är klar utan text"
     },
     "Eneo tal-till-text" : {
-
-    },
-    "Eneo-konto" : {
 
     },
     "eneo.dinorganisation.se" : {
@@ -254,10 +260,10 @@
       "comment" : "Rubrik när Eneo-adressen saknas helt"
     },
     "Inloggad" : {
-
+      "comment" : "Kontostatus när e-postadressen är okänd"
     },
     "Inloggad som %@" : {
-
+      "comment" : "Kontostatus. Platshållaren är e-postadressen."
     },
     "Inloggning pågår redan" : {
       "comment" : "Rubrik när inloggning redan är igång"
@@ -283,9 +289,6 @@
     "Inspelning %@" : {
       "comment" : "Förvald titel på en ny inspelning. Platshållaren är datum och tid."
     },
-    "Inspelning fungerar utan nät. Inloggningen behövs bara när du omvandlar till text." : {
-
-    },
     "Inspelningar sparas lokalt på din enhet." : {
 
     },
@@ -300,6 +303,9 @@
     },
     "Inställningar" : {
 
+    },
+    "Inte kopplad till Eneo" : {
+      "comment" : "Kontostatus när ingen serveradress finns"
     },
     "iteca.se/eneotaltilltext" : {
 
@@ -323,6 +329,9 @@
       "comment" : "Rubrik när alla kommunikationstester lyckas\nRubrik när servertest lyckas"
     },
     "Kontakt" : {
+
+    },
+    "Konto" : {
 
     },
     "Kontrollera att det finns ledigt utrymme på telefonen och försök igen." : {
@@ -352,8 +361,8 @@
     "Kontrollerar anslutning" : {
 
     },
-    "Kontrollerar anslutning..." : {
-
+    "Kontrollerar anslutning…" : {
+      "comment" : "Kontomeny medan servern kontrolleras"
     },
     "Kontrollerar servern" : {
 
@@ -381,6 +390,9 @@
     },
     "Laddar upp ljud..." : {
       "comment" : "Status medan ljudfilen skickas"
+    },
+    "Lägg till serveradress under Inställningar." : {
+
     },
     "Längd" : {
 
@@ -457,9 +469,6 @@
     "När du stoppar en inspelning skickas den till Eneo direkt, utan att du behöver trycka på Omvandla till text." : {
 
     },
-    "Når inte Eneo-servern just nu" : {
-
-    },
     "Ofullständigt svar från Eneo" : {
       "comment" : "Rubrik när ett fält saknas i svaret"
     },
@@ -470,6 +479,9 @@
 
     },
     "Omvandla igen" : {
+
+    },
+    "Omvandla när Eneo nås" : {
 
     },
     "Omvandla till text" : {
@@ -547,11 +559,8 @@
     "Servern svarar." : {
       "comment" : "Servertest utan inloggning"
     },
-    "Skickas till Eneo" : {
-      "comment" : "Rad ovanför Omvandla-knappen när användaren är inloggad utan känd e-post"
-    },
-    "Skickas till Eneo som %@" : {
-      "comment" : "Rad ovanför Omvandla-knappen när användaren är inloggad. Platshållaren är e-postadressen."
+    "Sluta vänta på omvandling" : {
+
     },
     "Slutför" : {
 
@@ -587,9 +596,6 @@
 
     },
     "Starta om appen. Om felet kvarstår kan appens lokala data behöva rensas." : {
-
-    },
-    "Status" : {
 
     },
     "Steg %lld av %lld" : {
@@ -642,10 +648,7 @@
 
     },
     "Utloggad" : {
-
-    },
-    "Utvecklingen sker på fritiden, vid sidan av ordinarie arbete. Vill din verksamhet säkra fortsatt drift och vidareutveckling finns supportavtal — mejla christian@iteca.se så återkommer jag med upplägg." : {
-
+      "comment" : "Kontostatus när användaren inte är inloggad"
     },
     "Välj app" : {
       "comment" : "Visas i Inställningar när ingen förvald Eneo-app är vald"
@@ -677,8 +680,17 @@
     "Vänta tills den pågående inloggningen är klar." : {
       "comment" : "Åtgärd när inloggning redan pågår"
     },
+    "Väntar på Eneo" : {
+
+    },
     "Väntar på inloggning..." : {
       "comment" : "Status medan användaren loggar in"
+    },
+    "Väntar på omvandling" : {
+      "comment" : "VoiceOver när inspelningen väntar på att Eneo ska nås"
+    },
+    "Väntar på omvandling: %lld" : {
+
     },
     "Verifiera server" : {
 

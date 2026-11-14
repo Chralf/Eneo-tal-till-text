@@ -62,7 +62,16 @@ extension ErrorPresentation {
     }
 
     private init(_ urlError: URLError) {
-        let details = "URLError \(urlError.errorCode): \(urlError.localizedDescription)"
+        var details = "URLError \(urlError.errorCode): \(urlError.localizedDescription)"
+        // The socket-level code tells a refused connection (61) from an
+        // unreachable host (65), which separates VPN routing from server faults.
+        let userInfo = (urlError as NSError).userInfo
+        if let streamCode = userInfo["_kCFStreamErrorCodeKey"] {
+            details += "\nStream error: \(streamCode)"
+        }
+        if let url = urlError.failingURL {
+            details += "\nURL: \(url.absoluteString)"
+        }
 
         switch urlError.code {
         case .notConnectedToInternet, .networkConnectionLost, .dataNotAllowed:

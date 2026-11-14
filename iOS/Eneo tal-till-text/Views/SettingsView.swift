@@ -20,10 +20,7 @@ struct SettingsView: View {
     @State private var availableApps: [EneoApp] = []
     @State private var personalSpaceID: String?
     @State private var noticeAlert: SettingsNoticeAlert?
-    @State private var showSignOutConfirmation = false
-    @State private var showConnectSheet = false
     @State private var showAppPicker = false
-    @State private var serverReachability: SettingsServerReachability = .checking
     @State private var pendingRetentionDays: Int?
     @State private var retentionWarningCount = 0
     @State private var showRetentionWarning = false
@@ -67,8 +64,8 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                serverSection
                 accountSection
+                serverSection
                 appSection
                 autoConvertSection
                 retentionSection
@@ -125,18 +122,6 @@ struct SettingsView: View {
                             loadApps(openPickerWhenDone: false)
                         }
                     }
-            }
-            .sheet(isPresented: $showConnectSheet, onDismiss: {
-                if authService.isAuthenticated {
-                    serverReachability = .reachable
-                    loadApps(openPickerWhenDone: false)
-                }
-            }) {
-                EneoConnectView(
-                    onFinished: { _ in
-                        showConnectSheet = false
-                    }
-                )
             }
             .alert("Ändra gallring?", isPresented: $showRetentionWarning) {
                 Button("Avbryt", role: .cancel) {
@@ -225,86 +210,22 @@ struct SettingsView: View {
         } header: {
             Text("Server")
         } footer: {
-            Text("Adressen till din organisations Eneo. Byter du adress loggas du ut.")
+            Text("Adressen till din organisations Eneo.")
         }
     }
 
-    /// Sign-in and sign-out are both offered here, so the account is something
-    /// the user can see and control rather than a prompt that appears mid-task.
-    @ViewBuilder
+    /// One row: account state, reachability and the sign-in/out button.
     private var accountSection: some View {
         Section {
-            LabeledContent("Status") {
-                accountStatusLabel
-            }
-
-            if serverReachability == .unreachable {
-                Label("Når inte Eneo-servern just nu", systemImage: "wifi.slash")
-                    .labelStyle(.titleAndIcon)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-
-            if authService.isAuthenticated {
-                // Signing out is local, so it must not depend on reachability.
-                Button("Logga ut", role: .destructive) {
-                    showSignOutConfirmation = true
-                }
-            } else {
-                Button {
-                    beginSignIn()
-                } label: {
-                    if isCheckingServer {
-                        HStack {
-                            ProgressView()
-                            Text("Kontrollerar anslutning...")
-                        }
-                    } else {
-                        Label("Logga in i Eneo", systemImage: "person.crop.circle.badge.checkmark")
-                    }
-                }
-                .disabled(!isBaseURLValid || isCheckingServer)
-            }
-        } header: {
-            Text("Eneo-konto")
-        } footer: {
-            Text("Inspelning fungerar utan nät. Inloggningen behövs bara när du omvandlar till text.")
-        }
-        .confirmationDialog("Logga ut från Eneo?", isPresented: $showSignOutConfirmation, titleVisibility: .visible) {
-            Button("Logga ut", role: .destructive) {
-                signOut()
-            }
-            Button("Avbryt", role: .cancel) {}
-        } message: {
-            Text("Dina inspelningar ligger kvar på telefonen.")
-        }
-    }
-
-    /// Account state is shown regardless of reachability; being offline is
-    /// reported separately and never hides whether the user is signed in.
-    @ViewBuilder
-    private var accountStatusLabel: some View {
-        if authService.isAuthenticated {
-            if let email = authService.accountEmail {
-                Label("Inloggad som \(email)", systemImage: "checkmark.circle.fill")
-                    .labelStyle(.titleAndIcon)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.trailing)
-            } else {
-                Label("Inloggad", systemImage: "checkmark.circle.fill")
-                    .labelStyle(.titleAndIcon)
-                    .foregroundStyle(.secondary)
-            }
-        } else {
-            Label("Utloggad", systemImage: "person.crop.circle.badge.questionmark")
-                .labelStyle(.titleAndIcon)
-                .foregroundStyle(.secondary)
+            AccountMenu(style: .row, onSignedIn: {
+                loadApps(openPickerWhenDone: false)
+            })
         }
     }
 
     @ViewBuilder
     private var appSection: some View {
-        if serverReachability == .reachable, authService.isAuthenticated {
+        if uploadService.serverReachability == .reachable, authService.isAuthenticated {
             Section {
                 Button {
                     beginSelectDefaultApp()
@@ -371,20 +292,13 @@ struct SettingsView: View {
     @ViewBuilder
     private var aboutSection: some View {
         Section {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Appen är gratis och fortsätter vara det.")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundStyle(.primary)
-                Text("Utvecklingen sker på fritiden, vid sidan av ordinarie arbete. Vill din verksamhet säkra fortsatt drift och vidareutveckling finns supportavtal — mejla christian@iteca.se så återkommer jag med upplägg.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(.vertical, 2)
-            .accessibilityElement(children: .combine)
+            Text("Appen är gratis och fortsätter vara det.")
+                .font(.subheadline)
+                .fontWeight(.medium)
+                .foregroundStyle(.primary)
+                .padding(.vertical, 2)
 
-            if let emailURL = URL(string: "mailto:christian@iteca.se?subject=Supportavtal%20Eneo%20tal-till-text") {
+            if let emailURL = URL(string: "mailto:christian@iteca.se?subject=Eneo%20tal-till-text") {
                 Link(destination: emailURL) {
                     Label("christian@iteca.se", systemImage: "envelope")
                 }
@@ -451,24 +365,6 @@ struct SettingsView: View {
         try? modelContext.save()
     }
 
-    private func signOut() {
-        authService.signOut()
-        resetConnectionState()
-    }
-
-    private func beginSignIn() {
-        guard !isCheckingServer else { return }
-        commitServerChange()
-        Task {
-            guard await ensureServerReachable() else { return }
-            // A stuck sign-in flag must not swallow the button.
-            if authService.isSigningIn {
-                authService.cancelSignIn()
-            }
-            showConnectSheet = true
-        }
-    }
-
     private func resetConnectionState() {
         availableApps = []
         isLoadingApps = false
@@ -486,17 +382,7 @@ struct SettingsView: View {
 
     @MainActor
     private func refreshServerReachability() async {
-        guard isBaseURLValid else {
-            serverReachability = .unreachable
-            return
-        }
-        serverReachability = .checking
-        do {
-            try await uploadService.probeServerReachability()
-            serverReachability = .reachable
-        } catch {
-            serverReachability = .unreachable
-        }
+        await uploadService.refreshServerReachability()
     }
 
     private func beginSelectDefaultApp() {
@@ -518,10 +404,8 @@ struct SettingsView: View {
         defer { isCheckingServer = false }
         do {
             try await uploadService.probeServerReachability()
-            serverReachability = .reachable
             return true
         } catch {
-            serverReachability = .unreachable
             presentNotice(ErrorPresentation(error))
             return false
         }
@@ -533,9 +417,7 @@ struct SettingsView: View {
         Task {
             do {
                 try await uploadService.probeServerReachability()
-                serverReachability = .reachable
             } catch {
-                serverReachability = .unreachable
                 presentNotice(ErrorPresentation(error))
                 isTestingCommunication = false
                 return
@@ -617,12 +499,6 @@ struct SettingsView: View {
     }
 }
 
-
-private enum SettingsServerReachability {
-    case checking
-    case reachable
-    case unreachable
-}
 
 private struct SettingsNoticeAlert: Identifiable {
     let id = UUID()

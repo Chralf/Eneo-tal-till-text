@@ -5,8 +5,9 @@ import AVFoundation
 @main
 struct EneoTalTillTextApp: App {
     @State private var audioRecorderService = AudioRecorderService()
-    @State private var recordingUploadService = RecordingUploadService()
-    @State private var eneoAuthService = EneoAuthService()
+    @State private var recordingUploadService: RecordingUploadService
+    @State private var eneoAuthService: EneoAuthService
+    @State private var conversionCoordinator: ConversionCoordinator
 
     @State private var importResult: ImportResult?
     @Environment(\.scenePhase) private var scenePhase
@@ -15,6 +16,11 @@ struct EneoTalTillTextApp: App {
     let startupError: String?
 
     init() {
+        let uploadService = RecordingUploadService()
+        let authService = EneoAuthService()
+        _recordingUploadService = State(initialValue: uploadService)
+        _eneoAuthService = State(initialValue: authService)
+        _conversionCoordinator = State(initialValue: ConversionCoordinator(uploadService: uploadService, authService: authService))
         TranscriptionNotificationPresenter.shared.install()
         do {
             modelContainer = try ModelContainer(for: Recording.self)
@@ -38,6 +44,7 @@ struct EneoTalTillTextApp: App {
                     .environment(audioRecorderService)
                     .environment(recordingUploadService)
                     .environment(eneoAuthService)
+                    .environment(conversionCoordinator)
                     .modelContainer(modelContainer)
                     .onOpenURL { url in
                         handleIncomingURL(url)
@@ -45,15 +52,19 @@ struct EneoTalTillTextApp: App {
                     .task {
                         RecordingPersistence.recoverOnLaunch(context: modelContainer.mainContext)
                     }
-                    .onChange(of: scenePhase) { _, phase in
+                    .onChange(of: scenePhase, initial: true) { _, phase in
                         // Retention must also apply when the app is merely
                         // brought back from the background, not only at launch.
                         if phase == .active {
                             RecordingPersistence.purgeExpiredRecordings(context: modelContainer.mainContext)
                             // Let Settings and the detail view show the real
                             // session state before the user acts on it.
+                            // Then convert whatever waited for Eneo, if it
+                            // answers now.
                             Task {
                                 await eneoAuthService.refreshAuthenticationState()
+                                await recordingUploadService.refreshServerReachability()
+                                await conversionCoordinator.processQueue(context: modelContainer.mainContext)
                             }
                         }
                     }
