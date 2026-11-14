@@ -100,7 +100,14 @@ class MainActivity : ComponentActivity() {
         super.onStart()
         // Retention must also apply when the app is merely brought back from
         // the background, not only at process start.
-        (application as EneoApplication).container.repository.purgeExpiredOnForeground()
+        val container = (application as EneoApplication).container
+        container.repository.purgeExpiredOnForeground()
+        // Let the account menu, Settings and the detail screen show the real
+        // state before the user acts.
+        lifecycleScope.launch {
+            container.authService.refreshAuthenticationState()
+            container.uploadService.refreshServerReachability()
+        }
     }
 
     override fun onNewIntent(intent: Intent) {

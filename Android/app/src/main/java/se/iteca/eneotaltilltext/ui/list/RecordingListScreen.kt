@@ -63,6 +63,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import se.iteca.eneotaltilltext.R
 import se.iteca.eneotaltilltext.data.RecordingEntity
 import se.iteca.eneotaltilltext.data.TranscriptionState
+import se.iteca.eneotaltilltext.ui.components.AccountMenu
+import se.iteca.eneotaltilltext.ui.components.AccountMenuStyle
 import se.iteca.eneotaltilltext.ui.theme.LocalWarningColor
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -107,6 +109,7 @@ fun RecordingListScreen(
                     }
                 },
                 actions = {
+                    AccountMenu(style = AccountMenuStyle.Toolbar, onOpenSettings = onOpenSettings)
                     IconButton(onClick = onOpenSettings) {
                         Icon(Icons.Filled.Settings, contentDescription = stringResource(R.string.settings_title))
                     }

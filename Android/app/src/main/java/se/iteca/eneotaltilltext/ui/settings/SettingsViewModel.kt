@@ -15,13 +15,8 @@ import se.iteca.eneotaltilltext.data.RecordingRetention
 import se.iteca.eneotaltilltext.network.EneoApp
 import se.iteca.eneotaltilltext.network.EneoAuthService
 import se.iteca.eneotaltilltext.network.RecordingUploadService
+import se.iteca.eneotaltilltext.network.ServerReachability
 import se.iteca.eneotaltilltext.ui.eneoViewModelFactory
-
-enum class SettingsServerReachability {
-    Checking,
-    Reachable,
-    Unreachable,
-}
 
 class SettingsViewModel(
     private val settingsStore: ApiSettingsStore,
@@ -67,8 +62,8 @@ class SettingsViewModel(
     private val _notice = MutableStateFlow<ErrorPresentation?>(null)
     val notice: StateFlow<ErrorPresentation?> = _notice.asStateFlow()
 
-    private val _serverReachability = MutableStateFlow(SettingsServerReachability.Checking)
-    val serverReachability: StateFlow<SettingsServerReachability> = _serverReachability.asStateFlow()
+    /** Shared with the account menu, so every screen shows the same answer. */
+    val serverReachability: StateFlow<ServerReachability> = uploadService.serverReachability
 
     val isBaseUrlValid: Boolean
         get() = ApiSettingsStore.makeBaseUrl(_draftBaseUrl.value) != null
@@ -129,11 +124,6 @@ class SettingsViewModel(
         refreshServerReachability()
     }
 
-    fun signOut() {
-        authService.signOut()
-        resetConnectionState()
-    }
-
     fun dismissNotice() {
         _notice.value = null
     }
@@ -147,17 +137,7 @@ class SettingsViewModel(
 
     fun refreshServerReachability() {
         viewModelScope.launch {
-            if (!isBaseUrlValid) {
-                _serverReachability.value = SettingsServerReachability.Unreachable
-                return@launch
-            }
-            _serverReachability.value = SettingsServerReachability.Checking
-            try {
-                uploadService.probeServerReachability()
-                _serverReachability.value = SettingsServerReachability.Reachable
-            } catch (_: Exception) {
-                _serverReachability.value = SettingsServerReachability.Unreachable
-            }
+            uploadService.refreshServerReachability()
         }
     }
 
@@ -170,12 +150,10 @@ class SettingsViewModel(
             _isCheckingServer.value = true
             try {
                 uploadService.probeServerReachability()
-                _serverReachability.value = SettingsServerReachability.Reachable
                 _isCheckingServer.value = false
                 onReady()
                 loadApps()
             } catch (error: Exception) {
-                _serverReachability.value = SettingsServerReachability.Unreachable
                 _notice.value = ErrorPresentation.from(app, error)
                 _isCheckingServer.value = false
             }
@@ -189,9 +167,7 @@ class SettingsViewModel(
         viewModelScope.launch {
             try {
                 uploadService.probeServerReachability()
-                _serverReachability.value = SettingsServerReachability.Reachable
             } catch (error: Exception) {
-                _serverReachability.value = SettingsServerReachability.Unreachable
                 _notice.value = ErrorPresentation.from(app, error)
                 _isTesting.value = false
                 return@launch

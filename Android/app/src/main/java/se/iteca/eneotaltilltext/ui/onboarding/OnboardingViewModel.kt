@@ -159,6 +159,20 @@ class OnboardingViewModel(
                 return@launch
             }
             _serverUrlDraft.value = ApiSettingsStore.displayBaseUrl(normalized)
+            // Going back and entering another server must not carry the
+            // previous server's sign-in and app choice over to it.
+            val previous = ApiSettingsStore.normalizedBaseUrl(settingsStore.baseUrl)
+            if (previous.isNotEmpty() && previous != normalized) {
+                authService.signOut()
+                _selectedAppId.value = ""
+                settingsStore.appId = ""
+                settingsStore.defaultAppName = ""
+                settingsStore.defaultAppSpaceName = ""
+                _availableApps.value = emptyList()
+                _personalSpaceId.value = null
+                _appLoadError.value = null
+                _loginPhase.value = LoginPhase.Prompt
+            }
             settingsStore.baseUrl = normalized
             try {
                 uploadService.probeServerReachability()

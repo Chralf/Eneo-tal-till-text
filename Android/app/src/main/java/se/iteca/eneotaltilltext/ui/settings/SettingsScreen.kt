@@ -14,12 +14,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Language
-import androidx.compose.material.icons.filled.WifiOff
-import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -51,6 +48,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import se.iteca.eneotaltilltext.R
+import se.iteca.eneotaltilltext.network.ServerReachability
+import se.iteca.eneotaltilltext.ui.components.AccountMenu
+import se.iteca.eneotaltilltext.ui.components.AccountMenuStyle
 import se.iteca.eneotaltilltext.ui.components.EneoAppPickerDialog
 import se.iteca.eneotaltilltext.ui.components.RetentionDaysDialog
 import se.iteca.eneotaltilltext.ui.components.retentionDaysLabel
@@ -76,12 +76,11 @@ fun SettingsScreen(
     val isAuthenticated by viewModel.authService.isAuthenticated.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val supportWebsiteUrl = stringResource(R.string.settings_support_website_url)
-    var showSignOut by remember { mutableStateOf(false) }
     var showAppPicker by remember { mutableStateOf(false) }
     var showRetentionPicker by remember { mutableStateOf(false) }
     val isBaseUrlValid = ApiSettingsStoreValid(draftBaseUrl)
     val isSelectingApp = isCheckingServer || isLoadingApps
-    val canManageAccount = serverReachability == SettingsServerReachability.Reachable
+    val canManageAccount = serverReachability == ServerReachability.Reachable
 
 
     LaunchedEffect(Unit) {
@@ -115,6 +114,13 @@ fun SettingsScreen(
                 .padding(horizontal = 20.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
+            // One row: account state, reachability and the sign-in/out button.
+            AccountMenu(
+                style = AccountMenuStyle.Row,
+                onSignedIn = { viewModel.loadApps() },
+            )
+
+            HorizontalDivider()
             SectionHeader(stringResource(R.string.settings_section_server))
             OutlinedTextField(
                 value = draftBaseUrl,
@@ -137,56 +143,6 @@ fun SettingsScreen(
                 )
             }
             FooterText(stringResource(R.string.settings_server_footer))
-
-            HorizontalDivider()
-            SectionHeader(stringResource(R.string.settings_section_account))
-            when (serverReachability) {
-                SettingsServerReachability.Checking -> {
-                    InfoLine(
-                        stringResource(R.string.settings_account_status),
-                        stringResource(R.string.settings_checking_server),
-                        leading = {
-                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                        },
-                    )
-                }
-                SettingsServerReachability.Unreachable -> {
-                    InfoLine(
-                        stringResource(R.string.settings_account_status),
-                        stringResource(R.string.settings_server_unreachable),
-                        leading = {
-                            Icon(
-                                Icons.Filled.WifiOff,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        },
-                    )
-                }
-                SettingsServerReachability.Reachable -> {
-                    InfoLine(
-                        stringResource(R.string.settings_account_status),
-                        if (isAuthenticated) {
-                            stringResource(R.string.settings_signed_in)
-                        } else {
-                            stringResource(R.string.settings_signed_out)
-                        },
-                        leading = {
-                            Icon(
-                                if (isAuthenticated) Icons.Filled.CheckCircle else Icons.Outlined.AccountCircle,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        },
-                    )
-                    if (isAuthenticated) {
-                        TextButton(onClick = { showSignOut = true }) {
-                            Text(stringResource(R.string.settings_sign_out), color = MaterialTheme.colorScheme.error)
-                        }
-                    }
-                }
-            }
-            FooterText(stringResource(R.string.settings_account_footer))
 
             if (canManageAccount && isAuthenticated) {
                 HorizontalDivider()
@@ -343,25 +299,6 @@ fun SettingsScreen(
                 TextButton(onClick = { viewModel.dismissNotice() }) {
                     Text(stringResource(R.string.ok))
                 }
-            },
-        )
-    }
-
-    if (showSignOut) {
-        AlertDialog(
-            onDismissRequest = { showSignOut = false },
-            title = { Text(stringResource(R.string.settings_sign_out_title)) },
-            text = { Text(stringResource(R.string.settings_sign_out_message)) },
-            confirmButton = {
-                TextButton(onClick = {
-                    showSignOut = false
-                    viewModel.signOut()
-                }) {
-                    Text(stringResource(R.string.settings_sign_out), color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showSignOut = false }) { Text(stringResource(R.string.cancel)) }
             },
         )
     }

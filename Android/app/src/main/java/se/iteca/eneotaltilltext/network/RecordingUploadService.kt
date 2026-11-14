@@ -33,6 +33,16 @@ import kotlinx.coroutines.withContext
 import android.content.Context
 import se.iteca.eneotaltilltext.R
 
+/**
+ * Whether the Eneo host answered the latest probe. Being unreachable is the
+ * normal state outside the organisation's network, not an error.
+ */
+enum class ServerReachability {
+    Unknown,
+    Reachable,
+    Unreachable,
+}
+
 class RecordingUploadService(
     private val context: Context,
     private val settingsStore: ApiSettingsStore,
@@ -45,6 +55,13 @@ class RecordingUploadService(
 
     private val _uploadingRecordingId = MutableStateFlow<String?>(null)
     val uploadingRecordingId: StateFlow<String?> = _uploadingRecordingId.asStateFlow()
+
+    /** Updated by every probe, so all screens share one answer. */
+    private val _serverReachability = MutableStateFlow(ServerReachability.Unknown)
+    val serverReachability: StateFlow<ServerReachability> = _serverReachability.asStateFlow()
+
+    private val _isCheckingReachability = MutableStateFlow(false)
+    val isCheckingReachability: StateFlow<Boolean> = _isCheckingReachability.asStateFlow()
 
     private val currentCall = AtomicReference<Call?>(null)
     private val uploadEpoch = AtomicInteger(0)
@@ -102,7 +119,40 @@ class RecordingUploadService(
      * Lightweight reachability: any HTTP response means the host is reachable
      * (even 401/404). Connection failures surface as network guidance.
      */
-    suspend fun probeServerReachability() = withContext(Dispatchers.IO) {
+    suspend fun probeServerReachability() {
+        try {
+            try {
+                probeOnce()
+            } catch (error: java.io.IOException) {
+                // An on-demand VPN starts its tunnel on the first request to
+                // the host; that request can fail before the tunnel is up.
+                delay(2_000)
+                probeOnce()
+            }
+            _serverReachability.value = ServerReachability.Reachable
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            _serverReachability.value = ServerReachability.Unreachable
+            throw error
+        }
+    }
+
+    /** Probe without throwing, for status displays. */
+    suspend fun refreshServerReachability() {
+        _isCheckingReachability.value = true
+        try {
+            probeServerReachability()
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            // Already recorded in serverReachability.
+        } finally {
+            _isCheckingReachability.value = false
+        }
+    }
+
+    private suspend fun probeOnce() = withContext(Dispatchers.IO) {
         val rawBaseUrl = settingsStore.baseUrl.trim()
         if (rawBaseUrl.isEmpty()) throw RecordingUploadErrors.missingServerUrl(context)
         val baseUrl = ApiSettingsStore.makeBaseUrl(rawBaseUrl)
