@@ -99,12 +99,8 @@ final class Recording {
         !(transcriptionText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
     }
 
-    static let queuedStatus = "queued"
-
     enum TranscriptionState {
         case none
-        /// Waiting for Eneo to become reachable.
-        case queued
         case processing
         case failed
         case completed
@@ -113,9 +109,6 @@ final class Recording {
     var transcriptionState: TranscriptionState {
         if uploadStatus == "processing" || isTranscribing {
             return .processing
-        }
-        if uploadStatus == Recording.queuedStatus {
-            return .queued
         }
         // An expired sign-in keeps its explanation in uploadError but is not
         // a failed conversion, so only the status decides.

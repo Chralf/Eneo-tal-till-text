@@ -57,14 +57,11 @@ struct EneoTalTillTextApp: App {
                         // brought back from the background, not only at launch.
                         if phase == .active {
                             RecordingPersistence.purgeExpiredRecordings(context: modelContainer.mainContext)
-                            // Let Settings and the detail view show the real
-                            // session state before the user acts on it.
-                            // Then convert whatever waited for Eneo, if it
-                            // answers now.
+                            // Let the account menu, Settings and the detail
+                            // view show the real state before the user acts.
                             Task {
                                 await eneoAuthService.refreshAuthenticationState()
                                 await recordingUploadService.refreshServerReachability()
-                                await conversionCoordinator.processQueue(context: modelContainer.mainContext)
                             }
                         }
                     }

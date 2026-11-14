@@ -52,17 +52,8 @@ struct RecordingDetailView: View {
         coordinator.lastErrors[recording.id] ?? persistedUploadError
     }
 
-    /// Outside the organisation's network Convert queues the recording, and
-    /// the button says so up front.
-    private var isEneoUnreachable: Bool {
-        uploadService.serverReachability == .unreachable
-    }
-
     private var uploadButtonTitle: LocalizedStringKey {
-        if isEneoUnreachable {
-            return "Omvandla när Eneo nås"
-        }
-        return recording.hasTranscription ? "Omvandla igen" : "Omvandla till text"
+        recording.hasTranscription ? "Omvandla igen" : "Omvandla till text"
     }
 
     private var hasServerAddress: Bool {
@@ -118,11 +109,6 @@ struct RecordingDetailView: View {
         }
         .task {
             await recoverMissingAudioIfPossible()
-            if recording.transcriptionState == .queued {
-                // The network may have changed while the app stayed open.
-                await uploadService.refreshServerReachability()
-                await coordinator.processQueue(context: modelContext)
-            }
             if autoStartUpload {
                 onAutoStartHandled?()
                 if recording.audioFileExists, !recording.hasTranscription, !uploadService.isUploading {
@@ -349,24 +335,6 @@ struct RecordingDetailView: View {
                         .buttonStyle(.bordered)
                     }
                     .padding(.vertical, 8)
-                } else if recording.transcriptionState == .queued {
-                    HStack(spacing: 12) {
-                        Image(systemName: "clock")
-                            .foregroundStyle(.secondary)
-                            .accessibilityHidden(true)
-
-                        Text("Väntar på Eneo")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-
-                        Button("Avbryt") {
-                            coordinator.cancelWaiting(recording, context: modelContext)
-                        }
-                        .buttonStyle(.bordered)
-                        .accessibilityLabel("Sluta vänta på omvandling")
-                    }
-                    .padding(.vertical, 8)
                 } else {
                     if !hasServerAddress {
                         Text("Lägg till serveradress under Inställningar.")
@@ -380,7 +348,7 @@ struct RecordingDetailView: View {
                         uploadRecording()
                     } label: {
                         HStack(spacing: 10) {
-                            Image(systemName: isEneoUnreachable ? "clock" : "arrow.up.circle.fill")
+                            Image(systemName: "arrow.up.circle.fill")
                             Text(uploadButtonTitle)
                                 .font(.headline)
                         }
@@ -751,12 +719,7 @@ struct RecordingDetailView: View {
         }
 
         Task {
-            // Outside the organisation's network the recording waits and is
-            // converted the next time the app opens where Eneo answers.
-            guard await isServerReachableNow() else {
-                coordinator.enqueue(recording, context: modelContext)
-                return
-            }
+            guard await ensureServerReachable() else { return }
 
             guard authService.isAuthenticated else {
                 beginLogin(thenUpload: true, thenOpenApps: false)
@@ -799,18 +762,6 @@ struct RecordingDetailView: View {
     private func openAppPickerAfterAuth() {
         loadApps()
         showAppPicker = true
-    }
-
-    @MainActor
-    private func isServerReachableNow() async -> Bool {
-        isCheckingServer = true
-        defer { isCheckingServer = false }
-        do {
-            try await uploadService.probeServerReachability()
-            return true
-        } catch {
-            return false
-        }
     }
 
     /// Returns false when the host cannot be reached; surfaces network guidance.

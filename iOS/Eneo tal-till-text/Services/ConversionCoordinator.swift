@@ -2,15 +2,14 @@ import Foundation
 import Observation
 import SwiftData
 
-/// Runs conversions and the waiting queue. Lives outside the views so queued
-/// recordings can be converted when no recording is open.
+/// Runs a conversion and stores its result. Kept out of the views so the
+/// upload, its error state and the result handling live in one place.
 @Observable
 @MainActor
 final class ConversionCoordinator {
     /// Failure from a conversion in this session, with symbol and sign-in
     /// hint. Persisted text takes over after a relaunch.
     private(set) var lastErrors: [UUID: ErrorPresentation] = [:]
-    private(set) var isProcessingQueue = false
 
     private let uploadService: RecordingUploadService
     private let authService: EneoAuthService
@@ -36,8 +35,7 @@ final class ConversionCoordinator {
     func convert(
         _ recording: Recording,
         appID: String,
-        context: ModelContext,
-        fromQueue: Bool = false
+        context: ModelContext
     ) -> Task<Void, Never>? {
         guard !uploadService.isUploading else { return nil }
 
@@ -92,71 +90,15 @@ final class ConversionCoordinator {
             } catch let error as URLError where error.code == .cancelled {
                 resetAfterCancel(recording, context: context)
             } catch {
-                handleFailure(error, for: recording, context: context, fromQueue: fromQueue)
+                handleFailure(error, for: recording, context: context)
             }
         }
-    }
-
-    /// Marks the recording to be converted once Eneo is reachable.
-    func enqueue(_ recording: Recording, context: ModelContext) {
-        lastErrors[recording.id] = nil
-        recording.uploadError = nil
-        recording.uploadProgressText = nil
-        recording.uploadStatus = Recording.queuedStatus
-        try? context.save()
-    }
-
-    func cancelWaiting(_ recording: Recording, context: ModelContext) {
-        guard recording.uploadStatus == Recording.queuedStatus else { return }
-        recording.uploadStatus = nil
-        try? context.save()
     }
 
     func clearError(for recording: Recording, context: ModelContext) {
         lastErrors[recording.id] = nil
         recording.uploadError = nil
         try? context.save()
-    }
-
-    /// Converts waiting recordings one at a time, oldest first. Stops as soon
-    /// as Eneo or the sign-in is lost; the rest stay queued for next time.
-    func processQueue(context: ModelContext) async {
-        guard !isProcessingQueue else { return }
-        guard authService.isAuthenticated, uploadService.serverReachability == .reachable else { return }
-        isProcessingQueue = true
-        defer { isProcessingQueue = false }
-
-        var attempted: Set<UUID> = []
-        var cachedApps: [EneoApp]?
-
-        while authService.isAuthenticated, !uploadService.isUploading {
-            let queued = ((try? context.fetch(FetchDescriptor<Recording>(sortBy: [SortDescriptor(\.dateCreated)]))) ?? [])
-                .filter { $0.uploadStatus == Recording.queuedStatus && $0.audioFileExists && !attempted.contains($0.id) }
-            guard let recording = queued.first else { return }
-            attempted.insert(recording.id)
-
-            var appID = recording.uploadAppID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            if appID.isEmpty {
-                appID = APISettings.storedDefaultAppID ?? ""
-            }
-            if appID.isEmpty {
-                // Without a chosen app only a single available app is safe
-                // to pick; otherwise the recording waits for the user.
-                if cachedApps == nil {
-                    cachedApps = (try? await uploadService.fetchApps()) ?? []
-                }
-                guard let apps = cachedApps, apps.count == 1 else { continue }
-                appID = apps[0].id
-                recording.uploadAppName = apps[0].name
-                recording.uploadSpaceName = apps[0].spaceName
-            }
-
-            guard let task = convert(recording, appID: appID, context: context, fromQueue: true) else { return }
-            await task.value
-
-            // Put back in the queue: connection or sign-in was lost.
-            if recording.uploadStatus == Recording.queuedStatus { return }
-        }
     }
 
     private func resetAfterCancel(_ recording: Recording, context: ModelContext) {
@@ -167,21 +109,13 @@ final class ConversionCoordinator {
         try? context.save()
     }
 
-    private func handleFailure(_ error: Error, for recording: Recording, context: ModelContext, fromQueue: Bool) {
+    private func handleFailure(_ error: Error, for recording: Recording, context: ModelContext) {
         guard Self.isAlive(recording) else { return }
         let presentation = ErrorPresentation(error)
         recording.uploadProgressText = nil
 
         if presentation.requiresSignIn {
             authService.handleExpiredSession()
-        }
-
-        // A queued recording that loses the network or the sign-in simply
-        // keeps waiting; that is not a failed conversion.
-        if fromQueue, presentation.requiresSignIn || Self.isConnectivityError(error) {
-            recording.uploadStatus = Recording.queuedStatus
-            try? context.save()
-            return
         }
 
         lastErrors[recording.id] = presentation
@@ -223,17 +157,5 @@ final class ConversionCoordinator {
     /// A recording deleted while its upload ran must not be written to.
     private static func isAlive(_ recording: Recording) -> Bool {
         !recording.isDeleted && recording.modelContext != nil
-    }
-
-    static func isConnectivityError(_ error: Error) -> Bool {
-        guard let urlError = error as? URLError else { return false }
-        switch urlError.code {
-        case .notConnectedToInternet, .networkConnectionLost, .cannotConnectToHost,
-             .cannotFindHost, .timedOut, .dnsLookupFailed, .internationalRoamingOff,
-             .dataNotAllowed, .secureConnectionFailed:
-            return true
-        default:
-            return false
-        }
     }
 }

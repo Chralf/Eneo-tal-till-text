@@ -4,9 +4,6 @@ import SwiftData
 struct RecordingListView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(RecordingUploadService.self) private var uploadService
-    @Environment(EneoAuthService.self) private var authService
-    @Environment(ConversionCoordinator.self) private var coordinator
-    @AppStorage(APISettings.baseURLStorageKey) private var storedBaseURLString = APISettings.defaultBaseURLString
     @Query(sort: \Recording.dateCreated, order: .reverse) private var recordings: [Recording]
 
     @State private var showRecordSheet = false
@@ -16,25 +13,6 @@ struct RecordingListView: View {
     @State private var pendingRecording: Recording?
     @State private var recordingToDelete: Recording?
     @State private var searchText = ""
-    @State private var signInRequested = false
-
-    private var waitingCount: Int {
-        recordings.filter { $0.transcriptionState == .queued }.count
-    }
-
-    /// Waiting recordings blocked only by a missing sign-in. Off-network
-    /// there is nothing to do, so nothing is shown then.
-    private var showsWaitingSignInRow: Bool {
-        waitingCount > 0
-            && !authService.isAuthenticated
-            && uploadService.serverReachability == .reachable
-    }
-
-    private func processQueue() {
-        Task {
-            await coordinator.processQueue(context: modelContext)
-        }
-    }
     /// The just-finished recording that should start converting when its
     /// detail view opens (only when the setting is on).
     @State private var autoConvertRecordingID: UUID?
@@ -76,8 +54,7 @@ struct RecordingListView: View {
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     AccountMenu(
                         style: .toolbar,
-                        onOpenSettings: { showSettingsSheet = true },
-                        onSignedIn: processQueue
+                        onOpenSettings: { showSettingsSheet = true }
                     )
                     Button {
                         showSettingsSheet = true
@@ -114,7 +91,6 @@ struct RecordingListView: View {
                     onAutoStartHandled: { autoConvertRecordingID = nil }
                 )
             }
-            .eneoSignIn(isRequested: $signInRequested, onSignedIn: processQueue)
             .confirmationDialog(
                 "Radera inspelning?",
                 isPresented: Binding(
@@ -169,9 +145,6 @@ struct RecordingListView: View {
     @ViewBuilder
     private var recordingsList: some View {
         List {
-            if showsWaitingSignInRow {
-                waitingSignInRow
-            }
             ForEach(filteredRecordings) { recording in
                 Button {
                     navigationPath.append(recording)
@@ -200,26 +173,6 @@ struct RecordingListView: View {
                 ContentUnavailableView.search(text: searchText)
             }
         }
-    }
-
-    private var waitingSignInRow: some View {
-        HStack(spacing: 12) {
-            Label("Väntar på omvandling: \(waitingCount)", systemImage: "clock")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            Button("Logga in") {
-                signInRequested = true
-            }
-            .buttonStyle(.borderless)
-            .font(.subheadline.weight(.semibold))
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .listRowInsets(EdgeInsets(top: 6, leading: 20, bottom: 6, trailing: 20))
-        .listRowSeparator(.hidden)
-        .listRowBackground(Color.clear)
     }
 
     private func deleteRecording(_ recording: Recording) {
@@ -278,8 +231,6 @@ struct RecordingRow: View {
             switch recording.transcriptionState {
             case .none:
                 EmptyView()
-            case .queued:
-                Image(systemName: "clock")
             case .processing:
                 ProgressView()
                     .controlSize(.mini)
@@ -304,8 +255,6 @@ struct RecordingRow: View {
         switch recording.transcriptionState {
         case .none:
             break
-        case .queued:
-            parts.append(String(localized: "Väntar på omvandling", comment: "VoiceOver när inspelningen väntar på att Eneo ska nås"))
         case .processing:
             parts.append(String(localized: "Omvandling pågår", comment: "VoiceOver när textomvandling pågår"))
         case .failed:

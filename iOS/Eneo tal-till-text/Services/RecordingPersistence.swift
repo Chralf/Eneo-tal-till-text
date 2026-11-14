@@ -52,6 +52,10 @@ enum RecordingPersistence {
     @MainActor
     private static func resetStuckTranscribingFlags(context: ModelContext) {
         guard let recordings = try? context.fetch(FetchDescriptor<Recording>()) else { return }
+        for recording in recordings where recording.uploadStatus == "queued" {
+            // Left over from the removed "convert when Eneo answers" queue.
+            recording.uploadStatus = nil
+        }
         for recording in recordings where recording.isTranscribing || recording.uploadStatus == "processing" {
             recording.isTranscribing = false
             if recording.uploadStatus == "processing" {
