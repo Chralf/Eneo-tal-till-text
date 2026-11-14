@@ -82,6 +82,13 @@ class ApiSettingsStore(context: Context) {
             }.apply()
         }
 
+    /** When true, stopping a recording starts conversion as the detail opens. */
+    var autoConvertAfterRecording: Boolean
+        get() = prefs.getBoolean(KEY_AUTO_CONVERT, false)
+        set(value) {
+            prefs.edit().putBoolean(KEY_AUTO_CONVERT, value).apply()
+        }
+
     /** Positive days (1...30). Default is 30. */
     var retentionDays: Int
         get() {
@@ -138,14 +145,20 @@ class ApiSettingsStore(context: Context) {
     }
 
     fun loadSettings(selectedAppId: String? = null): ApiSettings {
-        if (baseUrl.isEmpty()) throw IllegalStateException("missing_server_url")
-        val url = makeBaseUrl(baseUrl) ?: throw IllegalStateException("invalid_base_url")
+        val session = loadSession()
         val trimmedSelected = selectedAppId?.trim().orEmpty()
         val resolvedAppId = trimmedSelected.ifEmpty { appId }
         if (resolvedAppId.isEmpty()) throw IllegalStateException("missing_app_id")
+        return ApiSettings(baseUrl = session.baseUrl, appId = resolvedAppId, accessToken = session.accessToken)
+    }
+
+    /** Base URL + token without requiring a chosen transcription app. */
+    fun loadSession(): ApiSettings {
+        if (baseUrl.isEmpty()) throw IllegalStateException("missing_server_url")
+        val url = makeBaseUrl(baseUrl) ?: throw IllegalStateException("invalid_base_url")
         val token = accessToken
         if (token.isEmpty()) throw IllegalStateException("missing_token")
-        return ApiSettings(baseUrl = url, appId = resolvedAppId, accessToken = token)
+        return ApiSettings(baseUrl = url, appId = appId, accessToken = token)
     }
 
     private fun clearLegacyApiKeys() {
@@ -173,11 +186,29 @@ class ApiSettingsStore(context: Context) {
         private const val KEY_PENDING_STATE = "eneoPendingAuthState"
         private const val KEY_ONBOARDING_COMPLETED = "onboardingCompleted"
         private const val KEY_ONBOARDING_MIGRATION_CHECKED = "onboardingMigrationChecked"
+        private const val KEY_AUTO_CONVERT = "autoConvertAfterRecording"
 
         fun normalizedBaseUrl(value: String): String {
             var trimmed = value.trim()
             if (trimmed.isEmpty()) return ""
-            if (!trimmed.contains("://")) trimmed = "https://$trimmed"
+            // Always use HTTPS — the user should not have to type a scheme.
+            trimmed = when {
+                trimmed.startsWith("http://", ignoreCase = true) ->
+                    "https://" + trimmed.substring(7)
+                !trimmed.contains("://") -> "https://$trimmed"
+                else -> trimmed
+            }
+            return trimmed.trimEnd('/')
+        }
+
+        /** Host (and optional path) for editing fields — without the https:// prefix. */
+        fun displayBaseUrl(value: String): String {
+            var trimmed = value.trim()
+            trimmed = when {
+                trimmed.startsWith("https://", ignoreCase = true) -> trimmed.substring(8)
+                trimmed.startsWith("http://", ignoreCase = true) -> trimmed.substring(7)
+                else -> trimmed
+            }
             return trimmed.trimEnd('/')
         }
 

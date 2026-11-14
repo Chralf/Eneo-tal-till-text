@@ -80,6 +80,7 @@ import se.iteca.eneotaltilltext.util.Formatters
 fun RecordingDetailScreen(
     recordingId: String,
     onBack: () -> Unit,
+    autoStartUpload: Boolean = false,
     viewModel: RecordingDetailViewModel = viewModel(
         key = recordingId,
         factory = RecordingDetailViewModel.factory(recordingId),
@@ -122,6 +123,7 @@ fun RecordingDetailScreen(
     var isInfoExpanded by remember { mutableStateOf(false) }
     var isPlaybackExpanded by remember { mutableStateOf(false) }
     var titleText by remember { mutableStateOf("") }
+    var autoStartHandled by remember(recordingId) { mutableStateOf(false) }
 
     val uploadingThis = isUploading && uploadingId == recordingId
     val hasSelectedApp = selectedAppId.trim().isNotEmpty()
@@ -185,6 +187,24 @@ fun RecordingDetailScreen(
                 return@withServerReachable
             }
             startUploadAfterAuth()
+        }
+    }
+
+    val requestUploadLatest = rememberUpdatedState(newValue = ::requestUpload)
+    LaunchedEffect(
+        autoStartUpload,
+        current.id,
+        isRecoveringAudio,
+        uploadingThis,
+        current.hasTranscription,
+    ) {
+        if (!autoStartUpload || autoStartHandled || isRecoveringAudio) return@LaunchedEffect
+        autoStartHandled = true
+        if (!current.hasTranscription &&
+            !uploadingThis &&
+            viewModel.audioExists(current)
+        ) {
+            requestUploadLatest.value.invoke()
         }
     }
 

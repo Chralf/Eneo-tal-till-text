@@ -18,6 +18,8 @@
     <string name="list_record_button">Spela in</string>
     <string name="list_empty_title">Inga inspelningar</string>
     <string name="list_empty_subtitle">Spela in ljud för att komma igång.</string>
+    <string name="list_search_prompt">Sök bland inspelningar</string>
+    <string name="list_search_no_results">Inga resultat</string>
     <string name="list_imported">Importerad</string>
     <string name="list_status_processing">Omvandling pågår</string>
     <string name="list_status_failed">Omvandling misslyckades</string>
@@ -118,7 +120,7 @@
     <string name="settings_section_server">Server</string>
     <string name="settings_server_label">Serveradress</string>
     <string name="settings_server_footer">Adressen till din organisations Eneo. Byter du adress loggas du ut.</string>
-    <string name="settings_server_invalid">Ange en adress som börjar med https://</string>
+    <string name="settings_server_invalid">Ange en giltig serveradress</string>
     <string name="settings_section_account">Eneo-konto</string>
     <string name="settings_account_status">Status</string>
     <string name="settings_signed_in">Inloggad</string>
@@ -133,6 +135,8 @@
     <string name="settings_default_app">Förvald app</string>
     <string name="settings_select_app">Välj app</string>
     <string name="settings_convert_footer">Den förvalda appen används för nya omvandlingar. Du kan välja en annan app på en enskild inspelning.</string>
+    <string name="settings_auto_convert">Omvandla direkt efter inspelning</string>
+    <string name="settings_auto_convert_footer">När du stoppar en inspelning skickas den till Eneo direkt, utan att du behöver trycka på Omvandla till text.</string>
     <string name="settings_section_diagnostics">Felsökning</string>
     <string name="settings_section_retention">Gallring</string>
     <string name="settings_retention_label">Automatisk gallring</string>
@@ -248,8 +252,8 @@
     <string name="onboarding_connect_title">Anslut till Eneo</string>
     <string name="onboarding_connect_body">Ange adressen till din organisations Eneo-server.</string>
     <string name="onboarding_server_label">Serveradress</string>
-    <string name="onboarding_server_hint">https://eneo.dinorganisation.se</string>
-    <string name="onboarding_server_example">Exempel: https://eneo.dinorganisation.se</string>
+    <string name="onboarding_server_hint">eneo.dinorganisation.se</string>
+    <string name="onboarding_server_example">Exempel: eneo.dinorganisation.se</string>
     <string name="onboarding_verify_server">Verifiera server</string>
     <string name="onboarding_checking_server">Kontrollerar servern</string>
     <string name="onboarding_check_https">Säker HTTPS-anslutning</string>
@@ -273,6 +277,7 @@
     <string name="onboarding_shared_apps">Delade appar</string>
     <string name="onboarding_loading_apps">Hämtar appar…</string>
     <string name="onboarding_finish">Slutför</string>
+    <string name="onboarding_finish_later_hint">Du kan välja app senare under Inställningar.</string>
     <string name="onboarding_login_open_failed_title">Kunde inte öppna inloggning</string>
     <string name="onboarding_login_open_failed_message">Kontrollera serveradressen och nätverket och försök igen.</string>
     <string name="login_failed_title">Inloggningen kunde inte slutföras</string>

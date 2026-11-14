@@ -23,9 +23,11 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -33,15 +35,20 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -54,9 +61,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import se.iteca.eneotaltilltext.R
-import se.iteca.eneotaltilltext.ui.theme.LocalWarningColor
 import se.iteca.eneotaltilltext.data.RecordingEntity
 import se.iteca.eneotaltilltext.data.TranscriptionState
+import se.iteca.eneotaltilltext.ui.theme.LocalWarningColor
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -68,8 +75,23 @@ fun RecordingListScreen(
     viewModel: RecordingListViewModel = viewModel(factory = RecordingListViewModel.Factory),
 ) {
     val recordings by viewModel.recordings.collectAsStateWithLifecycle()
+    var searchQuery by remember { mutableStateOf("") }
+    var recordingToDelete by remember { mutableStateOf<RecordingEntity?>(null) }
+    val filtered = remember(recordings, searchQuery) {
+        val query = searchQuery.trim()
+        if (query.isEmpty()) {
+            recordings
+        } else {
+            recordings.filter { recording ->
+                recording.title.contains(query, ignoreCase = true) ||
+                    recording.summaryText.orEmpty().contains(query, ignoreCase = true) ||
+                    recording.transcriptionText.orEmpty().contains(query, ignoreCase = true)
+            }
+        }
+    }
     val grouped = MaterialTheme.colorScheme.surfaceContainer
     val card = MaterialTheme.colorScheme.surfaceContainerLowest
+    val isSearching = searchQuery.trim().isNotEmpty()
 
     Scaffold(
         containerColor = grouped,
@@ -112,53 +134,107 @@ fun RecordingListScreen(
             }
         },
     ) { padding ->
-        if (recordings.isEmpty()) {
-            EmptyState(Modifier.padding(padding))
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-                contentPadding = PaddingValues(start = 20.dp, top = 8.dp, end = 20.dp, bottom = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                items(recordings, key = { it.id }) { recording ->
-                    val dismissState = rememberSwipeToDismissBoxState()
-                    LaunchedEffect(dismissState.currentValue) {
-                        if (dismissState.currentValue == SwipeToDismissBoxValue.EndToStart) {
-                            viewModel.delete(recording)
-                        }
-                    }
-                    SwipeToDismissBox(
-                        state = dismissState,
-                        backgroundContent = {
-                            Box(
-                                Modifier
-                                    .fillMaxSize()
-                                    .padding(vertical = 6.dp)
-                                    .clip(RoundedCornerShape(16.dp))
-                                    .background(MaterialTheme.colorScheme.error),
-                                contentAlignment = Alignment.CenterEnd,
-                            ) {
-                                Icon(
-                                    Icons.Filled.Delete,
-                                    contentDescription = stringResource(R.string.delete),
-                                    tint = MaterialTheme.colorScheme.onError,
-                                    modifier = Modifier.padding(end = 20.dp),
-                                )
-                            }
+        when {
+            recordings.isEmpty() && !isSearching -> EmptyState(Modifier.padding(padding))
+            else -> {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(padding),
+                ) {
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 8.dp),
+                        singleLine = true,
+                        placeholder = { Text(stringResource(R.string.list_search_prompt)) },
+                        leadingIcon = {
+                            Icon(Icons.Filled.Search, contentDescription = null)
                         },
-                        enableDismissFromStartToEnd = false,
-                    ) {
-                        RecordingRow(
-                            recording = recording,
-                            cardColor = card,
-                            onClick = { onOpenRecording(recording.id) },
-                        )
+                    )
+                    if (filtered.isEmpty()) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                stringResource(R.string.list_search_no_results),
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(start = 20.dp, top = 0.dp, end = 20.dp, bottom = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            items(filtered, key = { it.id }) { recording ->
+                                val dismissState = rememberSwipeToDismissBoxState()
+                                LaunchedEffect(dismissState.currentValue) {
+                                    if (dismissState.currentValue == SwipeToDismissBoxValue.EndToStart) {
+                                        recordingToDelete = recording
+                                        dismissState.reset()
+                                    }
+                                }
+                                SwipeToDismissBox(
+                                    state = dismissState,
+                                    backgroundContent = {
+                                        Box(
+                                            Modifier
+                                                .fillMaxSize()
+                                                .padding(vertical = 6.dp)
+                                                .clip(RoundedCornerShape(16.dp))
+                                                .background(MaterialTheme.colorScheme.error),
+                                            contentAlignment = Alignment.CenterEnd,
+                                        ) {
+                                            Icon(
+                                                Icons.Filled.Delete,
+                                                contentDescription = stringResource(R.string.delete),
+                                                tint = MaterialTheme.colorScheme.onError,
+                                                modifier = Modifier.padding(end = 20.dp),
+                                            )
+                                        }
+                                    },
+                                    enableDismissFromStartToEnd = false,
+                                ) {
+                                    RecordingRow(
+                                        recording = recording,
+                                        cardColor = card,
+                                        onClick = { onOpenRecording(recording.id) },
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
+    }
+
+    recordingToDelete?.let { pending ->
+        AlertDialog(
+            onDismissRequest = { recordingToDelete = null },
+            title = { Text(stringResource(R.string.detail_delete_title)) },
+            text = { Text(stringResource(R.string.detail_delete_message)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        recordingToDelete = null
+                        viewModel.delete(pending)
+                    },
+                ) {
+                    Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { recordingToDelete = null }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
     }
 }
 

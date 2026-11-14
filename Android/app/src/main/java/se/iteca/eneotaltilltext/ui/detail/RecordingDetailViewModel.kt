@@ -344,8 +344,13 @@ class RecordingDetailViewModel(
         isDeleted = true
         viewModelScope.launch {
             player.stop(resetPosition = true)
-            val current = repository.get(recordingId) ?: return@launch
-            repository.delete(current)
+            if (uploadService.isUploading(recordingId)) {
+                UploadForegroundService.cancel(getApplication())
+            }
+            val current = repository.get(recordingId)
+            if (current != null) {
+                repository.delete(current)
+            }
             onDeleted()
         }
     }

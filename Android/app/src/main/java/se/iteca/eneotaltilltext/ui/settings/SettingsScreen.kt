@@ -29,6 +29,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -71,6 +72,7 @@ fun SettingsScreen(
     val serverReachability by viewModel.serverReachability.collectAsStateWithLifecycle()
     val retentionDays by viewModel.retentionDays.collectAsStateWithLifecycle()
     val retentionWarningCount by viewModel.retentionWarningCount.collectAsStateWithLifecycle()
+    val autoConvertAfterRecording by viewModel.autoConvertAfterRecording.collectAsStateWithLifecycle()
     val isAuthenticated by viewModel.authService.isAuthenticated.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val supportWebsiteUrl = stringResource(R.string.settings_support_website_url)
@@ -222,6 +224,24 @@ fun SettingsScreen(
                 }
                 FooterText(stringResource(R.string.settings_convert_footer))
             }
+
+            HorizontalDivider()
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    stringResource(R.string.settings_auto_convert),
+                    modifier = Modifier.weight(1f),
+                )
+                Switch(
+                    checked = autoConvertAfterRecording,
+                    onCheckedChange = viewModel::setAutoConvertAfterRecording,
+                )
+            }
+            FooterText(stringResource(R.string.settings_auto_convert_footer))
 
             HorizontalDivider()
             SectionHeader(stringResource(R.string.settings_section_diagnostics))

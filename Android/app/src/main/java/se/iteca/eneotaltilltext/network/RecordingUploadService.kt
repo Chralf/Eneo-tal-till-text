@@ -18,6 +18,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import se.iteca.eneotaltilltext.data.ApiSettings
 import se.iteca.eneotaltilltext.data.ApiSettingsStore
+import se.iteca.eneotaltilltext.data.PresentableException
 import java.io.File
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
@@ -57,17 +58,23 @@ class RecordingUploadService(
         .build()
 
     fun loadSettings(selectedAppId: String? = null): ApiSettings {
-        val rawBaseUrl = settingsStore.baseUrl.trim()
-        if (rawBaseUrl.isEmpty()) throw RecordingUploadErrors.missingServerUrl(context)
-        val baseUrl = ApiSettingsStore.makeBaseUrl(rawBaseUrl)
-            ?: throw RecordingUploadErrors.missingApiSettings(context)
+        val session = loadSession()
         val trimmedSelected = selectedAppId?.trim().orEmpty()
         val appId = trimmedSelected.ifEmpty { settingsStore.appId }.ifEmpty {
             throw RecordingUploadErrors.missingAppId(context)
         }
+        return ApiSettings(baseUrl = session.baseUrl, appId = appId, accessToken = session.accessToken)
+    }
+
+    /** Base URL + token for listing spaces/apps before a default app is chosen. */
+    fun loadSession(): ApiSettings {
+        val rawBaseUrl = settingsStore.baseUrl.trim()
+        if (rawBaseUrl.isEmpty()) throw RecordingUploadErrors.missingServerUrl(context)
+        val baseUrl = ApiSettingsStore.makeBaseUrl(rawBaseUrl)
+            ?: throw RecordingUploadErrors.missingApiSettings(context)
         val token = settingsStore.accessToken
         if (token.isEmpty()) throw RecordingUploadErrors.missingAccessToken(context)
-        return ApiSettings(baseUrl = baseUrl, appId = appId, accessToken = token)
+        return ApiSettings(baseUrl = baseUrl, appId = settingsStore.appId, accessToken = token)
     }
 
     fun isUploading(recordingId: String): Boolean =
@@ -112,7 +119,7 @@ class RecordingUploadService(
 
     suspend fun fetchPersonalSpaceId(): String? = withContext(Dispatchers.IO) {
         val settings = try {
-            loadSettings()
+            loadSession()
         } catch (_: Exception) {
             return@withContext null
         }
@@ -120,7 +127,7 @@ class RecordingUploadService(
     }
 
     suspend fun fetchApps(): List<EneoApp> = withContext(Dispatchers.IO) {
-        val settings = loadSettings()
+        val settings = loadSession()
         val spaces = fetchSpaces(settings)
         if (spaces.isEmpty()) throw RecordingUploadErrors.noSpacesFound(context)
 
@@ -141,22 +148,34 @@ class RecordingUploadService(
                     coroutineScope {
                         listed.map { app ->
                             async {
-                                val appEndpoint = EneoResponseParsers.makeUrl(settings.baseUrl, "/api/v1/apps/${app.id}/")
-                                val appRequest = Request.Builder()
-                                    .url(appEndpoint)
-                                    .get()
-                                    .header("Authorization", "Bearer ${settings.accessToken}")
-                                    .build()
-                                execute(appRequest).use { response ->
-                                    val body = response.body.string()
-                                    validate(
-                                        response,
-                                        body,
-                                        context.getString(R.string.debug_fetch_app, app.name),
-                                        appEndpoint,
-                                        "GET",
-                                    )
-                                    if (EneoResponseParsers.acceptsAudioInput(body)) app else null
+                                // One app the account may not read (e.g. 403)
+                                // must not hide every other app. Only an
+                                // expired sign-in still aborts the list.
+                                try {
+                                    val appEndpoint = EneoResponseParsers.makeUrl(settings.baseUrl, "/api/v1/apps/${app.id}/")
+                                    val appRequest = Request.Builder()
+                                        .url(appEndpoint)
+                                        .get()
+                                        .header("Authorization", "Bearer ${settings.accessToken}")
+                                        .build()
+                                    execute(appRequest).use { response ->
+                                        val body = response.body.string()
+                                        validate(
+                                            response,
+                                            body,
+                                            context.getString(R.string.debug_fetch_app, app.name),
+                                            appEndpoint,
+                                            "GET",
+                                        )
+                                        if (EneoResponseParsers.acceptsAudioInput(body)) app else null
+                                    }
+                                } catch (error: CancellationException) {
+                                    throw error
+                                } catch (error: PresentableException) {
+                                    if (error.presentation.requiresSignIn) throw error
+                                    null
+                                } catch (_: Exception) {
+                                    null
                                 }
                             }
                         }.awaitAll().filterNotNull()

@@ -45,7 +45,9 @@ class OnboardingViewModel(
     private val _step = MutableStateFlow(OnboardingStep.Welcome)
     val step: StateFlow<OnboardingStep> = _step.asStateFlow()
 
-    private val _serverUrlDraft = MutableStateFlow("")
+    private val _serverUrlDraft = MutableStateFlow(
+        ApiSettingsStore.displayBaseUrl(settingsStore.baseUrl),
+    )
     val serverUrlDraft: StateFlow<String> = _serverUrlDraft.asStateFlow()
 
     private val _verifyPhase = MutableStateFlow(VerifyPhase.Idle)
@@ -156,7 +158,7 @@ class OnboardingViewModel(
                 _verifyPhase.value = VerifyPhase.Failure
                 return@launch
             }
-            _serverUrlDraft.value = normalized
+            _serverUrlDraft.value = ApiSettingsStore.displayBaseUrl(normalized)
             settingsStore.baseUrl = normalized
             try {
                 uploadService.probeServerReachability()
@@ -242,6 +244,13 @@ class OnboardingViewModel(
     }
 
     fun completeOnboarding() {
+        val selected = _selectedAppId.value.trim()
+        if (selected.isNotEmpty()) {
+            settingsStore.appId = selected
+            _availableApps.value.firstOrNull { it.id == selected }?.let { app ->
+                settingsStore.persistDefaultAppDisplayName(app.name, app.spaceName, app.id)
+            }
+        }
         settingsStore.onboardingCompleted = true
     }
 
@@ -255,7 +264,10 @@ class OnboardingViewModel(
                 val apps = uploadService.fetchApps()
                 _availableApps.value = apps
                 if (apps.none { it.id == _selectedAppId.value }) {
-                    _selectedAppId.value = apps.firstOrNull()?.id ?: settingsStore.appId
+                    // Preselect only when there is nothing to choose between.
+                    val preselected = if (apps.size == 1) apps[0].id else ""
+                    _selectedAppId.value = preselected
+                    settingsStore.appId = preselected
                 }
                 apps.firstOrNull { it.id == _selectedAppId.value }?.let { app ->
                     settingsStore.persistDefaultAppDisplayName(app.name, app.spaceName, app.id)

@@ -59,6 +59,17 @@ class RecordingRepository(
 
     suspend fun clearUploadRunId(id: String) = dao.clearUploadRunId(id)
 
+    /**
+     * Clears file/run/app IDs that belong to a previous Eneo server.
+     * [excludeIds] are recordings still uploading — leave those alone.
+     */
+    suspend fun clearServerBoundUploadIds(excludeIds: Set<String> = emptySet()) {
+        dao.getAll().forEach { recording ->
+            if (recording.id in excludeIds) return@forEach
+            dao.clearServerBoundUploadIds(recording.id)
+        }
+    }
+
     suspend fun saveUploadFileId(id: String, fileId: String) = dao.saveUploadFileId(id, fileId)
 
     suspend fun saveUploadRunId(id: String, runId: String) = dao.saveUploadRunId(id, runId)

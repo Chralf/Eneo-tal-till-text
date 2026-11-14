@@ -75,6 +75,17 @@ interface RecordingDao {
         appId: String?,
     )
 
+    @Query("""
+        UPDATE recordings
+        SET uploadFileID = NULL,
+            uploadServerID = NULL,
+            uploadAppID = NULL,
+            uploadAppName = NULL,
+            uploadSpaceName = NULL
+        WHERE id = :id
+    """)
+    suspend fun clearServerBoundUploadIds(id: String)
+
     @Query("UPDATE recordings SET uploadServerID = NULL WHERE id = :id")
     suspend fun clearUploadRunId(id: String)
 

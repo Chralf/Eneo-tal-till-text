@@ -30,13 +30,16 @@ class SettingsViewModel(
     val authService: EneoAuthService,
     private val app: Application,
 ) : ViewModel() {
-    private val _draftBaseUrl = MutableStateFlow(settingsStore.baseUrl)
+    private val _draftBaseUrl = MutableStateFlow(ApiSettingsStore.displayBaseUrl(settingsStore.baseUrl))
     val draftBaseUrl: StateFlow<String> = _draftBaseUrl.asStateFlow()
 
     private var committedBaseUrl = ApiSettingsStore.normalizedBaseUrl(settingsStore.baseUrl)
 
     private val _appId = MutableStateFlow(settingsStore.appId)
     val appId: StateFlow<String> = _appId.asStateFlow()
+
+    private val _autoConvertAfterRecording = MutableStateFlow(settingsStore.autoConvertAfterRecording)
+    val autoConvertAfterRecording: StateFlow<Boolean> = _autoConvertAfterRecording.asStateFlow()
 
     private val _retentionDays = MutableStateFlow(settingsStore.retentionDays)
     val retentionDays: StateFlow<Int> = _retentionDays.asStateFlow()
@@ -77,6 +80,11 @@ class SettingsViewModel(
     fun setAppId(value: String) {
         _appId.value = value
         persistSelectedDefaultApp()
+    }
+
+    fun setAutoConvertAfterRecording(value: Boolean) {
+        settingsStore.autoConvertAfterRecording = value
+        _autoConvertAfterRecording.value = value
     }
 
     fun requestRetentionDays(value: Int) {
@@ -273,9 +281,26 @@ class SettingsViewModel(
     private fun commitServerChangeWithoutReachabilityRefresh() {
         val normalized = ApiSettingsStore.normalizedBaseUrl(_draftBaseUrl.value)
         if (ApiSettingsStore.makeBaseUrl(normalized) == null) return
-        _draftBaseUrl.value = normalized
+        _draftBaseUrl.value = ApiSettingsStore.displayBaseUrl(normalized)
         settingsStore.baseUrl = normalized
         if (normalized != committedBaseUrl) {
+            // App IDs belong to one Eneo installation, so the default app
+            // from the previous server would only fail on the new one.
+            if (committedBaseUrl.isNotEmpty()) {
+                _appId.value = ""
+                settingsStore.appId = ""
+                settingsStore.defaultAppName = ""
+                settingsStore.defaultAppSpaceName = ""
+                val uploadingId = uploadService.uploadingRecordingId.value
+                val exclude = if (uploadingId != null && uploadService.isUploading.value) {
+                    setOf(uploadingId)
+                } else {
+                    emptySet()
+                }
+                viewModelScope.launch {
+                    repository.clearServerBoundUploadIds(exclude)
+                }
+            }
             committedBaseUrl = normalized
             authService.signOut()
             resetConnectionState()

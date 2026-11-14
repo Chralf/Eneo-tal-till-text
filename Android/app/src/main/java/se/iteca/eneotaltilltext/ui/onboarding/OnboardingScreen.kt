@@ -436,12 +436,21 @@ private fun ActionBar(
                 val selected by viewModel.selectedAppId.collectAsStateWithLifecycle()
                 PrimaryButton(
                     text = stringResource(R.string.onboarding_finish),
-                    enabled = selected.isNotBlank() && !isLoading,
+                    enabled = !isLoading,
                     onClick = {
                         viewModel.completeOnboarding()
                         onComplete()
                     },
                 )
+                if (selected.isBlank() && !isLoading) {
+                    Text(
+                        stringResource(R.string.onboarding_finish_later_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
             }
         }
     }

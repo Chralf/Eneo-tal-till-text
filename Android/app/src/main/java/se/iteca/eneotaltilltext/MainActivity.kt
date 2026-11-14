@@ -45,7 +45,7 @@ class MainActivity : ComponentActivity() {
                     val navController = rememberNavController()
                     LaunchedEffect(Unit) {
                         importedRecordingIds.collectLatest { id ->
-                            navController.navigate("detail/$id")
+                            navController.navigate("detail/$id/false")
                         }
                     }
                     NavHost(navController = navController, startDestination = "list") {
@@ -54,13 +54,14 @@ class MainActivity : ComponentActivity() {
                             onOpenSettings = { navController.navigate("settings") },
                             onOpenInfo = { navController.navigate("info") },
                             onRecord = { navController.navigate("record") },
-                            onOpenRecording = { id -> navController.navigate("detail/$id") },
+                            onOpenRecording = { id -> navController.navigate("detail/$id/false") },
                         )
                     }
                     composable("record") {
                         RecordScreen(
                             onFinished = { recording ->
-                                navController.navigate("detail/${recording.id}") {
+                                val autoConvert = app.container.apiSettings.autoConvertAfterRecording
+                                navController.navigate("detail/${recording.id}/$autoConvert") {
                                     popUpTo("list")
                                 }
                             },
@@ -75,13 +76,18 @@ class MainActivity : ComponentActivity() {
                         InfoScreen(onDismiss = { navController.popBackStack() })
                     }
                     composable(
-                        route = "detail/{recordingId}",
-                        arguments = listOf(navArgument("recordingId") { type = NavType.StringType }),
+                        route = "detail/{recordingId}/{autoConvert}",
+                        arguments = listOf(
+                            navArgument("recordingId") { type = NavType.StringType },
+                            navArgument("autoConvert") { type = NavType.BoolType },
+                        ),
                     ) { entry ->
                         val id = entry.arguments?.getString("recordingId").orEmpty()
+                        val autoConvert = entry.arguments?.getBoolean("autoConvert") == true
                         RecordingDetailScreen(
                             recordingId = id,
                             onBack = { navController.popBackStack() },
+                            autoStartUpload = autoConvert,
                         )
                     }
                     }

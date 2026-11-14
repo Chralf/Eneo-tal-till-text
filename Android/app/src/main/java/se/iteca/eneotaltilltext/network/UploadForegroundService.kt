@@ -112,11 +112,14 @@ class UploadForegroundService : Service() {
                 existingRunId = existingRunId,
                 onCheckpoint = { fileId, runId ->
                     if (token != uploadToken) return@upload
+                    if (repository.get(recordingId) == null) return@upload
                     fileId?.let { repository.saveUploadFileId(recordingId, it) }
                     runId?.let { repository.saveUploadRunId(recordingId, it) }
                 },
             )
             if (token != uploadToken) return
+            // Recording was deleted while the upload ran — drop the result.
+            if (repository.get(recordingId) == null) return
             val output = response.output
             val metadata = output?.let { uploadService.metadataFrom(it) }
             val latestTitle = repository.get(recordingId)?.title ?: recording.title
@@ -140,9 +143,11 @@ class UploadForegroundService : Service() {
             }
         } catch (_: CancellationException) {
             if (token != uploadToken) return
+            if (repository.get(recordingId) == null) return
             repository.resetCancelledUpload(recordingId)
         } catch (error: Exception) {
             if (token != uploadToken) return
+            if (repository.get(recordingId) == null) return
             val presentation = ErrorPresentation.from(this, error)
             if (presentation.requiresSignIn) {
                 authService.handleExpiredSession()

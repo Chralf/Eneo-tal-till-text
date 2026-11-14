@@ -80,6 +80,12 @@ class RecordingFileStore(private val context: Context) {
         val audioExtensions = setOf("m4a", "wav", "mp3", "caf", "aac", "flac")
         val files = recordingsDirectory.listFiles() ?: return emptyList()
         return files.filter { file ->
+            // A merge killed mid-export leaves a partial copy of a recording
+            // whose parts are still on disk; it is not a recording of its own.
+            if (file.name.lowercase().endsWith("_concat_tmp.m4a")) {
+                file.delete()
+                return@filter false
+            }
             audioExtensions.contains(file.extension.lowercase()) &&
                 !RecordingSegmentNaming.isPartFileName(file.name) &&
                 !knownNames.contains(file.name) &&
