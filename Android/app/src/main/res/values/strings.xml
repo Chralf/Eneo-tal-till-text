@@ -154,7 +154,6 @@
     <string name="settings_check_apps">Appar</string>
     <string name="settings_check_apps_ok">%1$d appar kan hämtas.</string>
     <string name="settings_support_free">Appen är gratis och fortsätter vara det.</string>
-    <string name="settings_support_body">Utvecklingen sker på fritiden, vid sidan av ordinarie arbete. Vill din verksamhet säkra fortsatt drift och vidareutveckling finns supportavtal — mejla christian@iteca.se så återkommer jag med upplägg.</string>
     <string name="settings_support_email">christian@iteca.se</string>
     <string name="settings_support_website">iteca.se/eneotaltilltext</string>
     <string name="settings_support_website_url">https://iteca.se/eneotaltilltext</string>

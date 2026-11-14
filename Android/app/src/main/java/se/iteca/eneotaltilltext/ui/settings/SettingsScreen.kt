@@ -289,11 +289,6 @@ fun SettingsScreen(
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Medium,
                 )
-                Text(
-                    stringResource(R.string.settings_support_body),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
             }
             TextButton(
                 onClick = {
@@ -302,7 +297,7 @@ fun SettingsScreen(
                             Intent.ACTION_SENDTO,
                             Uri.parse(
                                 "mailto:christian@iteca.se?subject=" +
-                                    Uri.encode("Supportavtal Eneo tal-till-text"),
+                                    Uri.encode("Eneo tal-till-text"),
                             ),
                         ),
                     )

@@ -83,20 +83,13 @@ struct InfoView: View {
     @ViewBuilder
     private var contactSection: some View {
         Section {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Appen är gratis och fortsätter vara det.")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundStyle(.primary)
-                Text("Utvecklingen sker på fritiden, vid sidan av ordinarie arbete. Vill din verksamhet säkra fortsatt drift och vidareutveckling finns supportavtal — mejla christian@iteca.se så återkommer jag med upplägg.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(.vertical, 2)
-            .accessibilityElement(children: .combine)
+            Text("Appen är gratis och fortsätter vara det.")
+                .font(.subheadline)
+                .fontWeight(.medium)
+                .foregroundStyle(.primary)
+                .padding(.vertical, 2)
 
-            if let emailURL = URL(string: "mailto:christian@iteca.se?subject=Supportavtal%20Eneo%20tal-till-text") {
+            if let emailURL = URL(string: "mailto:christian@iteca.se?subject=Eneo%20tal-till-text") {
                 Link(destination: emailURL) {
                     Label("christian@iteca.se", systemImage: "envelope")
                 }

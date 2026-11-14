@@ -87,7 +87,6 @@ fun InfoScreen(
             ContactBlock(
                 title = stringResource(R.string.info_section_contact),
                 lead = stringResource(R.string.settings_support_free),
-                body = stringResource(R.string.settings_support_body),
             )
             TextButton(
                 onClick = {
@@ -96,7 +95,7 @@ fun InfoScreen(
                             Intent.ACTION_SENDTO,
                             Uri.parse(
                                 "mailto:christian@iteca.se?subject=" +
-                                    Uri.encode("Supportavtal Eneo tal-till-text"),
+                                    Uri.encode("Eneo tal-till-text"),
                             ),
                         ),
                     )
@@ -151,7 +150,7 @@ private fun TipBlock(title: String, body: String) {
 }
 
 @Composable
-private fun ContactBlock(title: String, lead: String, body: String) {
+private fun ContactBlock(title: String, lead: String) {
     InfoCard {
         Text(
             title,
@@ -165,12 +164,6 @@ private fun ContactBlock(title: String, lead: String, body: String) {
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Medium,
             color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Text(
-            body,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.fillMaxWidth(),
         )
     }
