@@ -10,6 +10,7 @@ struct SettingsView: View {
     @AppStorage(APISettings.baseURLStorageKey) private var storedBaseURLString = APISettings.defaultBaseURLString
     @AppStorage(APISettings.appIDStorageKey) private var appID = APISettings.defaultAppID
     @AppStorage(RecordingRetention.storageKey) private var retentionDays = RecordingRetention.defaultDays
+    @AppStorage(APISettings.autoConvertAfterRecordingStorageKey) private var autoConvertAfterRecording = false
 
     @State private var draftBaseURLString = ""
     @State private var committedBaseURLString = ""
@@ -69,6 +70,7 @@ struct SettingsView: View {
                 serverSection
                 accountSection
                 appSection
+                autoConvertSection
                 retentionSection
                 diagnosticsSection
                 aboutSection
@@ -92,7 +94,7 @@ struct SettingsView: View {
             .task {
                 let stored = storedBaseURLString.trimmingCharacters(in: .whitespacesAndNewlines)
                 let initial = stored.isEmpty ? APISettings.defaultBaseURLString : stored
-                draftBaseURLString = initial
+                draftBaseURLString = APISettings.displayBaseURLString(initial)
                 committedBaseURLString = APISettings.normalizedBaseURLString(initial)
                 await authService.refreshAuthenticationState()
                 await refreshServerReachability()
@@ -209,7 +211,7 @@ struct SettingsView: View {
     @ViewBuilder
     private var serverSection: some View {
         Section {
-            TextField("Serveradress", text: $draftBaseURLString, prompt: Text(verbatim: "https://eneo.dinorganisation.se"))
+            TextField("Serveradress", text: $draftBaseURLString, prompt: Text(verbatim: "eneo.dinorganisation.se"))
                 #if os(iOS)
                 .textInputAutocapitalization(.never)
                 .keyboardType(.URL)
@@ -218,7 +220,7 @@ struct SettingsView: View {
                 .onSubmit(commitServerChange)
 
             if !isBaseURLValid {
-                FieldValidationMessage(message: "Ange en adress som börjar med https://")
+                FieldValidationMessage(message: "Ange en giltig serveradress")
             }
         } header: {
             Text("Server")
@@ -335,6 +337,14 @@ struct SettingsView: View {
         }
     }
 
+    private var autoConvertSection: some View {
+        Section {
+            Toggle("Omvandla direkt efter inspelning", isOn: $autoConvertAfterRecording)
+        } footer: {
+            Text("När du stoppar en inspelning skickas den till Eneo direkt, utan att du behöver trycka på Omvandla till text.")
+        }
+    }
+
     @ViewBuilder
     private var diagnosticsSection: some View {
         Section {
@@ -404,11 +414,19 @@ struct SettingsView: View {
         let normalized = APISettings.normalizedBaseURLString(draftBaseURLString)
         guard APISettings.makeBaseURL(from: normalized) != nil else { return }
 
-        draftBaseURLString = normalized
+        draftBaseURLString = APISettings.displayBaseURLString(normalized)
         storedBaseURLString = normalized
 
         let hostChanged = normalized != committedBaseURLString
         if hostChanged {
+            // App IDs belong to one Eneo installation, so the default app
+            // from the previous server would only fail on the new one.
+            if !committedBaseURLString.isEmpty {
+                appID = ""
+                UserDefaults.standard.removeObject(forKey: APISettings.defaultAppNameStorageKey)
+                UserDefaults.standard.removeObject(forKey: APISettings.defaultAppSpaceNameStorageKey)
+                resetServerBoundUploadState()
+            }
             committedBaseURLString = normalized
             authService.signOut()
             resetConnectionState()
@@ -417,6 +435,20 @@ struct SettingsView: View {
         Task {
             await refreshServerReachability()
         }
+    }
+
+    /// File, run and app IDs saved on recordings point at the previous
+    /// server; resuming with them there would fail before a fresh upload.
+    private func resetServerBoundUploadState() {
+        guard let recordings = try? modelContext.fetch(FetchDescriptor<Recording>()) else { return }
+        for recording in recordings where !uploadService.isUploading(recording) {
+            recording.uploadFileID = nil
+            recording.uploadServerID = nil
+            recording.uploadAppID = nil
+            recording.uploadAppName = nil
+            recording.uploadSpaceName = nil
+        }
+        try? modelContext.save()
     }
 
     private func signOut() {

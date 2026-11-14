@@ -4,6 +4,10 @@ import AVFoundation
 
 struct RecordingDetailView: View {
     @Bindable var recording: Recording
+    /// Starts converting as soon as the view appears, for a recording that
+    /// was just finished with "convert after recording" turned on.
+    var autoStartUpload = false
+    var onAutoStartHandled: (() -> Void)?
 
     @Environment(RecordingUploadService.self) private var uploadService
     @Environment(EneoAuthService.self) private var authService
@@ -117,11 +121,18 @@ struct RecordingDetailView: View {
             Text("Inspelningen och ljudfilen raderas permanent.")
         }
         .onAppear {
+            RecordingPersistence.openRecordingIDs.insert(recording.id)
             loadPlaybackDuration()
             prepareAppSelection()
         }
         .task {
             await recoverMissingAudioIfPossible()
+            if autoStartUpload {
+                onAutoStartHandled?()
+                if recording.audioFileExists, !recording.hasTranscription, !uploadService.isUploading {
+                    uploadRecording()
+                }
+            }
         }
         .task(id: recording.transcriptionText) {
             let text = recording.transcriptionText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -135,6 +146,11 @@ struct RecordingDetailView: View {
             }
         }
         .onDisappear {
+            // Pushing the app picker also fires onDisappear, but the
+            // recording is still on screen underneath it.
+            if !showAppPicker {
+                RecordingPersistence.openRecordingIDs.remove(recording.id)
+            }
             if !isDeleted {
                 saveCurrentTitle()
             }
@@ -598,6 +614,7 @@ struct RecordingDetailView: View {
     }
 
     private func stopPlayback(resetPosition: Bool = false) {
+        let wasPlaying = audioPlayer != nil
         audioPlayer?.stop()
         audioPlayer = nil
         isPlaying = false
@@ -605,6 +622,12 @@ struct RecordingDetailView: View {
         if resetPosition {
             playbackPosition = 0
         }
+        #if os(iOS)
+        // Hand audio back so music or podcasts paused by playback can resume.
+        if wasPlaying {
+            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        }
+        #endif
     }
 
     private func seekPlayback(to position: TimeInterval) {
@@ -766,6 +789,7 @@ struct RecordingDetailView: View {
                     }
                     try? modelContext.save()
                 }
+                guard !recordingToUpload.isDeleted, recordingToUpload.modelContext != nil else { return }
                 recordingToUpload.uploadFileID = response.fileID
                 recordingToUpload.uploadServerID = response.id
                 recordingToUpload.uploadStatus = response.status ?? "complete"
@@ -833,6 +857,7 @@ struct RecordingDetailView: View {
     }
 
     private func resetAfterCancelledUpload(_ recording: Recording) {
+        guard !recording.isDeleted, recording.modelContext != nil else { return }
         recording.uploadStatus = nil
         recording.uploadProgressText = nil
         recording.uploadError = nil
@@ -840,6 +865,7 @@ struct RecordingDetailView: View {
     }
 
     private func handleUploadFailure(_ error: Error, for recording: Recording) {
+        guard !recording.isDeleted, recording.modelContext != nil else { return }
         let presentation = ErrorPresentation(error)
 
         activeUploadError = presentation
@@ -917,6 +943,11 @@ struct RecordingDetailView: View {
 
     private func deleteRecording() {
         stopPlayback()
+        // An upload left running would write its result into the deleted
+        // model and post a notification for a recording that is gone.
+        if uploadService.isUploading(recording) {
+            uploadService.cancelInFlightUpload()
+        }
         isDeleted = true
         try? FileManager.default.removeItem(at: recording.audioFileURL)
         RecordingPersistence.deleteSessionPartFiles(forFinalFileName: recording.audioFileName)

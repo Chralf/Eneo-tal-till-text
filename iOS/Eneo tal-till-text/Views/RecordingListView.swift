@@ -3,6 +3,7 @@ import SwiftData
 
 struct RecordingListView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(RecordingUploadService.self) private var uploadService
     @Query(sort: \Recording.dateCreated, order: .reverse) private var recordings: [Recording]
 
     @State private var showRecordSheet = false
@@ -10,6 +11,22 @@ struct RecordingListView: View {
     @State private var showInfoSheet = false
     @State private var navigationPath = NavigationPath()
     @State private var pendingRecording: Recording?
+    @State private var recordingToDelete: Recording?
+    @State private var searchText = ""
+    /// The just-finished recording that should start converting when its
+    /// detail view opens (only when the setting is on).
+    @State private var autoConvertRecordingID: UUID?
+    @AppStorage(APISettings.autoConvertAfterRecordingStorageKey) private var autoConvertAfterRecording = false
+
+    private var filteredRecordings: [Recording] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return recordings }
+        return recordings.filter { recording in
+            recording.title.localizedStandardContains(query)
+                || (recording.summaryText?.localizedStandardContains(query) ?? false)
+                || (recording.transcriptionText?.localizedStandardContains(query) ?? false)
+        }
+    }
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
@@ -49,6 +66,7 @@ struct RecordingListView: View {
             .sheet(isPresented: $showRecordSheet, onDismiss: {
                 if let recording = pendingRecording {
                     pendingRecording = nil
+                    autoConvertRecordingID = autoConvertAfterRecording ? recording.id : nil
                     navigationPath.append(recording)
                 }
             }) {
@@ -63,7 +81,30 @@ struct RecordingListView: View {
                 InfoView()
             }
             .navigationDestination(for: Recording.self) { recording in
-                RecordingDetailView(recording: recording)
+                RecordingDetailView(
+                    recording: recording,
+                    autoStartUpload: recording.id == autoConvertRecordingID,
+                    onAutoStartHandled: { autoConvertRecordingID = nil }
+                )
+            }
+            .confirmationDialog(
+                "Radera inspelning?",
+                isPresented: Binding(
+                    get: { recordingToDelete != nil },
+                    set: { if !$0 { recordingToDelete = nil } }
+                ),
+                titleVisibility: .visible,
+                presenting: recordingToDelete
+            ) { recording in
+                Button("Radera", role: .destructive) {
+                    deleteRecording(recording)
+                    recordingToDelete = nil
+                }
+                Button("Avbryt", role: .cancel) {
+                    recordingToDelete = nil
+                }
+            } message: { _ in
+                Text("Inspelningen och ljudfilen raderas permanent.")
             }
         }
     }
@@ -100,7 +141,7 @@ struct RecordingListView: View {
     @ViewBuilder
     private var recordingsList: some View {
         List {
-            ForEach(recordings) { recording in
+            ForEach(filteredRecordings) { recording in
                 Button {
                     navigationPath.append(recording)
                 } label: {
@@ -112,7 +153,7 @@ struct RecordingListView: View {
                 .listRowBackground(Color.clear)
                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                     Button(role: .destructive) {
-                        deleteRecording(recording)
+                        recordingToDelete = recording
                     } label: {
                         Label("Radera", systemImage: "trash")
                     }
@@ -122,9 +163,18 @@ struct RecordingListView: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
+        .searchable(text: $searchText, prompt: "Sök bland inspelningar")
+        .overlay {
+            if filteredRecordings.isEmpty {
+                ContentUnavailableView.search(text: searchText)
+            }
+        }
     }
 
     private func deleteRecording(_ recording: Recording) {
+        if uploadService.isUploading(recording) {
+            uploadService.cancelInFlightUpload()
+        }
         try? FileManager.default.removeItem(at: recording.audioFileURL)
         RecordingPersistence.deleteSessionPartFiles(forFinalFileName: recording.audioFileName)
         modelContext.delete(recording)

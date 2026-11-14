@@ -42,7 +42,9 @@ struct AppLogicTests {
     @Test func baseURLNormalizationAddsHTTPSAndRemovesTrailingSlashes() {
         #expect(APISettings.normalizedBaseURLString(" eneo.kommun.se/// ") == "https://eneo.kommun.se")
         #expect(APISettings.makeBaseURL(from: "eneo.kommun.se")?.absoluteString == "https://eneo.kommun.se")
-        #expect(APISettings.makeBaseURL(from: "http://eneo.kommun.se") == nil)
+        #expect(APISettings.normalizedBaseURLString("http://eneo.kommun.se") == "https://eneo.kommun.se")
+        #expect(APISettings.makeBaseURL(from: "http://eneo.kommun.se")?.absoluteString == "https://eneo.kommun.se")
+        #expect(APISettings.displayBaseURLString("https://eneo.kommun.se/") == "eneo.kommun.se")
     }
 
     @Test func parseAccountEmailPrefersEmailThenUsername() throws {

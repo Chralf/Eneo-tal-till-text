@@ -34,7 +34,7 @@
     "Ange adressen till din organisations Eneo-server." : {
 
     },
-    "Ange en adress som börjar med https://" : {
+    "Ange en giltig serveradress" : {
 
     },
     "Anslut till Eneo" : {
@@ -115,7 +115,7 @@
     "Du kan nu välja vilken Eneo-app som ska användas för transkriberingar." : {
 
     },
-    "Du kan slutföra ändå och välja app senare under Inställningar." : {
+    "Du kan välja app senare under Inställningar." : {
 
     },
     "Du loggar in i Eneo när du omvandlar." : {
@@ -151,7 +151,10 @@
     "Eneo-konto" : {
 
     },
-    "Exempel: https://eneo.dinorganisation.se" : {
+    "eneo.dinorganisation.se" : {
+
+    },
+    "Exempel: eneo.dinorganisation.se" : {
 
     },
     "Felsökning" : {
@@ -218,9 +221,6 @@
 
     },
     "Hoppa över, jag vill bara spela in" : {
-
-    },
-    "https://eneo.dinorganisation.se" : {
 
     },
     "Importerad" : {
@@ -454,6 +454,9 @@
     "Något gick fel" : {
       "comment" : "Rubrik för fel utan känd orsak"
     },
+    "När du stoppar en inspelning skickas den till Eneo direkt, utan att du behöver trycka på Omvandla till text." : {
+
+    },
     "Når inte Eneo-servern just nu" : {
 
     },
@@ -461,6 +464,9 @@
       "comment" : "Rubrik när ett fält saknas i svaret"
     },
     "OK" : {
+
+    },
+    "Omvandla direkt efter inspelning" : {
 
     },
     "Omvandla igen" : {
@@ -554,6 +560,9 @@
       "comment" : "Status medan koden växlas mot token"
     },
     "Sök" : {
+
+    },
+    "Sök bland inspelningar" : {
 
     },
     "Sparar inspelningen..." : {

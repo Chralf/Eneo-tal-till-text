@@ -12,6 +12,8 @@ struct APISettings {
     static let defaultAppID = ""
     static let defaultAppNameStorageKey = "eneoAppName"
     static let defaultAppSpaceNameStorageKey = "eneoAppSpaceName"
+    /// When on, a finished recording is sent to Eneo as soon as it opens.
+    static let autoConvertAfterRecordingStorageKey = "autoConvertAfterRecording"
     /// No server is assumed either; onboarding asks for it.
     static let defaultBaseURLString = ""
 
@@ -27,18 +29,26 @@ struct APISettings {
     let accessToken: String
 
     static func load() throws -> APISettings {
-        let baseURL = try loadBaseURL()
+        let session = try loadSession()
 
         guard let appID = storedDefaultAppID else {
             throw RecordingUploadError.missingAppID
         }
+
+        return APISettings(baseURL: session.baseURL, appID: appID, accessToken: session.accessToken)
+    }
+
+    /// Base URL + token for authenticated calls that do not need an app yet
+    /// (listing spaces/apps). Uploads still use `load()`.
+    static func loadSession() throws -> APISettings {
+        let baseURL = try loadBaseURL()
 
         let accessToken = AuthTokenStore.loadAccessToken().trimmingCharacters(in: .whitespacesAndNewlines)
         guard !accessToken.isEmpty else {
             throw RecordingUploadError.missingAccessToken
         }
 
-        return APISettings(baseURL: baseURL, appID: appID, accessToken: accessToken)
+        return APISettings(baseURL: baseURL, appID: storedDefaultAppID ?? "", accessToken: accessToken)
     }
 
     static func loadBaseURL() throws -> URL {
@@ -71,7 +81,10 @@ struct APISettings {
         var trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return "" }
 
-        if !trimmed.contains("://") {
+        // Always use HTTPS — the user should not have to type a scheme.
+        if trimmed.lowercased().hasPrefix("http://") {
+            trimmed = "https://" + trimmed.dropFirst("http://".count)
+        } else if !trimmed.contains("://") {
             trimmed = "https://\(trimmed)"
         }
 
@@ -79,6 +92,20 @@ struct APISettings {
             trimmed.removeLast()
         }
 
+        return trimmed
+    }
+
+    /// Host (and optional path) for editing fields — without the https:// prefix.
+    static func displayBaseURLString(_ value: String) -> String {
+        var trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.lowercased().hasPrefix("https://") {
+            trimmed = String(trimmed.dropFirst("https://".count))
+        } else if trimmed.lowercased().hasPrefix("http://") {
+            trimmed = String(trimmed.dropFirst("http://".count))
+        }
+        while trimmed.hasSuffix("/") {
+            trimmed.removeLast()
+        }
         return trimmed
     }
 
@@ -142,13 +169,20 @@ final class RecordingUploadService {
 
     private var inFlightUpload: Task<Void, Never>?
 
-    private let urlSession: URLSession = {
+    private let urlSession: URLSession
+
+    /// Tests inject a session backed by a stub URLProtocol.
+    init(urlSession: URLSession = RecordingUploadService.makeDefaultSession()) {
+        self.urlSession = urlSession
+    }
+
+    nonisolated static func makeDefaultSession() -> URLSession {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 30 * 60
         configuration.timeoutIntervalForResource = 4 * 60 * 60
         configuration.waitsForConnectivity = true
         return URLSession(configuration: configuration)
-    }()
+    }
 
     func isUploading(_ recording: Recording) -> Bool {
         isUploading && uploadingRecordingID == recording.id
@@ -226,7 +260,7 @@ final class RecordingUploadService {
 
     func fetchPersonalSpaceId() async -> String? {
         do {
-            let settings = try APISettings.load()
+            let settings = try APISettings.loadSession()
             let spacesEndpoint = try Self.makeURL(baseURL: settings.baseURL, path: "/api/v1/spaces/type/personal/")
             var spacesRequest = URLRequest(url: spacesEndpoint)
             spacesRequest.httpMethod = "GET"
@@ -240,7 +274,7 @@ final class RecordingUploadService {
     }
 
     func fetchApps() async throws -> [EneoApp] {
-        let settings = try APISettings.load()
+        let settings = try APISettings.loadSession()
         let spaces = try await fetchSpaces(settings: settings)
         guard !spaces.isEmpty else {
             throw RecordingUploadError.noSpacesFound
@@ -271,9 +305,19 @@ final class RecordingUploadService {
                                 appRequest.httpMethod = "GET"
                                 Self.authorize(&appRequest, accessToken: accessToken)
 
-                                let (appData, appResponse) = try await urlSession.data(for: appRequest)
-                                try Self.validate(response: appResponse, data: appData, operation: "Hämta app \(app.name)", url: appEndpoint, method: "GET")
-                                return Self.acceptsAudioInput(in: appData) ? app : nil
+                                // One app the account may not read (e.g. 403)
+                                // must not hide every other app. Only an
+                                // expired sign-in still aborts the list.
+                                do {
+                                    let (appData, appResponse) = try await urlSession.data(for: appRequest)
+                                    try Self.validate(response: appResponse, data: appData, operation: "Hämta app \(app.name)", url: appEndpoint, method: "GET")
+                                    return Self.acceptsAudioInput(in: appData) ? app : nil
+                                } catch RecordingUploadError.unauthorized(let operation, let url) {
+                                    throw RecordingUploadError.unauthorized(operation: operation, url: url)
+                                } catch {
+                                    try Task.checkCancellation()
+                                    return nil
+                                }
                             }
                         }
 
@@ -357,16 +401,9 @@ final class RecordingUploadService {
             throw RecordingUploadError.audioFileMissing
         }
 
-        isUploading = true
-        uploadingRecordingID = recording.id
+        // Busy state is owned by performUpload. Clearing it here would let a
+        // cancelled upload, unwinding late, mark its successor as finished.
         statusText = String(localized: "Laddar upp ljud...", comment: "Status medan ljudfilen skickas")
-        defer {
-            isUploading = false
-            statusText = nil
-            if uploadingRecordingID == recording.id {
-                uploadingRecordingID = nil
-            }
-        }
 
         let loadedSettings = try APISettings.load()
         let trimmedSelectedAppID = selectedAppID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""

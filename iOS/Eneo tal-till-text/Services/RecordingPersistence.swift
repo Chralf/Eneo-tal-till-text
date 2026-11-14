@@ -3,6 +3,11 @@ import SwiftData
 import AVFoundation
 
 enum RecordingPersistence {
+    /// Recordings shown on screen right now. Retention skips them: deleting a
+    /// model a view still reads crashes SwiftData, and they are purged on the
+    /// next pass after the view closes.
+    @MainActor static var openRecordingIDs: Set<UUID> = []
+
     /// Resets stuck transcription flags and recovers audio files without DB rows.
     @MainActor
     static func recoverOnLaunch(context: ModelContext) {
@@ -25,6 +30,9 @@ enum RecordingPersistence {
         let now = Date()
         for recording in recordings {
             if recording.isTranscribing || recording.uploadStatus == "processing" {
+                continue
+            }
+            if openRecordingIDs.contains(recording.id) {
                 continue
             }
             guard RecordingRetention.isExpired(
@@ -91,6 +99,12 @@ enum RecordingPersistence {
             let name = fileURL.lastPathComponent
             guard audioExtensions.contains(fileURL.pathExtension.lowercased()) else { continue }
             guard !RecordingSegmentNaming.isPartFileName(name) else { continue }
+            // A merge killed mid-export leaves a partial copy of a recording
+            // whose parts are still on disk; it is not a recording of its own.
+            if RecordingSegmentNaming.isMergeTempFileName(name) {
+                try? fm.removeItem(at: fileURL)
+                continue
+            }
             Recording.protectFile(at: fileURL)
             guard !knownNames.contains(name) else { continue }
 

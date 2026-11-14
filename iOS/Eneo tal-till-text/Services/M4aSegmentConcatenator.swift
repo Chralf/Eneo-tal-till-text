@@ -28,6 +28,13 @@ enum RecordingSegmentNaming {
         directory.appendingPathComponent(finalFileName(baseName: baseName))
     }
 
+    /// Scratch file an interrupted merge can leave behind.
+    static func isMergeTempFileName(_ fileName: String) -> Bool {
+        fileName.lowercased().hasSuffix(mergeTempSuffix)
+    }
+
+    static let mergeTempSuffix = "_concat_tmp.m4a"
+
     static func isPartFileName(_ fileName: String) -> Bool {
         parsePart(fileName) != nil
     }
@@ -143,7 +150,7 @@ enum M4aSegmentConcatenator {
         }
 
         let temp = output.deletingLastPathComponent()
-            .appendingPathComponent("\(output.deletingPathExtension().lastPathComponent)_concat_tmp.m4a")
+            .appendingPathComponent("\(output.deletingPathExtension().lastPathComponent)\(RecordingSegmentNaming.mergeTempSuffix)")
         try? FileManager.default.removeItem(at: temp)
 
         guard let export = AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetAppleM4A) else {

@@ -101,7 +101,7 @@ struct OnboardingView: View {
             // An onboarding abandoned after the server step starts over, but
             // the address already entered should not have to be typed again.
             if serverURLDraft.isEmpty {
-                serverURLDraft = OnboardingStore.storedServerURLString
+                serverURLDraft = APISettings.displayBaseURLString(OnboardingStore.storedServerURLString)
             }
         }
     }
@@ -157,7 +157,7 @@ struct OnboardingView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Serveradress")
                     .font(.subheadline.weight(.semibold))
-                TextField("https://eneo.dinorganisation.se", text: $serverURLDraft)
+                TextField("eneo.dinorganisation.se", text: $serverURLDraft)
                     .textInputAutocapitalization(.never)
                     .keyboardType(.URL)
                     .autocorrectionDisabled()
@@ -165,7 +165,7 @@ struct OnboardingView: View {
                     .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
             }
 
-            Text("Exempel: https://eneo.dinorganisation.se")
+            Text("Exempel: eneo.dinorganisation.se")
                 .font(.footnote)
                 .foregroundStyle(.tertiary)
         }
@@ -261,9 +261,6 @@ struct OnboardingView: View {
             } else if let appLoadError {
                 Text(appLoadError.message ?? appLoadError.title)
                     .foregroundStyle(.secondary)
-                Text("Du kan slutföra ändå och välja app senare under Inställningar.")
-                    .font(.footnote)
-                    .foregroundStyle(.tertiary)
             } else {
                 appSections
             }
@@ -351,11 +348,19 @@ struct OnboardingView: View {
         case .login:
             loginActions
         case .selectApp:
-            // With a load error the user may finish anyway and pick an app
-            // later; otherwise a choice is required.
-            primaryButton("Slutför", disabled: isLoadingApps || (selectedAppID.isEmpty && appLoadError == nil)) {
-                OnboardingStore.markCompleted()
-                onComplete()
+            // App choice is optional here — Settings can set the default later.
+            VStack(spacing: 12) {
+                primaryButton("Slutför", disabled: isLoadingApps) {
+                    OnboardingStore.markCompleted()
+                    onComplete()
+                }
+                if selectedAppID.isEmpty, !isLoadingApps {
+                    Text("Du kan välja app senare under Inställningar.")
+                        .font(.footnote)
+                        .foregroundStyle(.tertiary)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                }
             }
         }
     }
@@ -459,7 +464,19 @@ struct OnboardingView: View {
                 verifyPhase = .failure("Kontrollera serveradressen och nätverksanslutningen.")
                 return
             }
-            serverURLDraft = normalized
+            serverURLDraft = APISettings.displayBaseURLString(normalized)
+            // Going back and entering another server must not carry the
+            // previous server's sign-in and app choice over to it.
+            let previous = APISettings.normalizedBaseURLString(OnboardingStore.storedServerURLString)
+            if !previous.isEmpty, previous != normalized {
+                authService.signOut()
+                selectedAppID = ""
+                UserDefaults.standard.removeObject(forKey: APISettings.defaultAppNameStorageKey)
+                UserDefaults.standard.removeObject(forKey: APISettings.defaultAppSpaceNameStorageKey)
+                availableApps = []
+                personalSpaceID = nil
+                appLoadError = nil
+            }
             OnboardingStore.saveServerURL(normalized)
             do {
                 try await uploadService.probeServerReachability()
